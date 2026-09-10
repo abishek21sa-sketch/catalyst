@@ -143,6 +143,11 @@ export default function CatalystView() {
         : snapshot.events.filter((event) => event.kind === eventFilter),
     [eventFilter],
   );
+  function changeEventFilter(nextFilter: EventFilter) {
+    setEventFilter(nextFilter);
+    const nextEvents = nextFilter === 'all' ? snapshot.events : snapshot.events.filter((event) => event.kind === nextFilter);
+    if (!nextEvents.some((event) => event.id === selectedId) && nextEvents[0]) setSelectedId(nextEvents[0].id);
+  }
   const netMargin = margin(metrics[2].value, metrics[0].value);
   async function refreshSource() {
     setSourceState('loading');
@@ -420,9 +425,7 @@ export default function CatalystView() {
                     <span className="sr-only">Filter event stream</span>
                     <select
                       value={eventFilter}
-                      onChange={(event) =>
-                        setEventFilter(event.target.value as EventFilter)
-                      }
+                    onChange={(event) => changeEventFilter(event.target.value as EventFilter)}
                       className="bg-transparent text-[11px] text-slate-400 outline-none"
                     >
                       <option value="all">All events</option>
