@@ -18,10 +18,21 @@ import {
   Search,
   Sparkles,
   Target,
+  Trash2,
   X,
 } from 'lucide-react';
 import { formatMetric, loadSecFixture, margin } from '../lib/sec-adapter';
 import type { Event } from '../lib/domain';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -102,6 +113,7 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
+  const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   useEffect(() => {
     try {
       const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
@@ -183,6 +195,23 @@ export default function CatalystView() {
       });
     }
     setDraftKind(null);
+  }
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === 'hypothesis') {
+      setHypotheses((items) => {
+        const next = items.filter((item) => item.id !== deleteTarget.id);
+        window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+        return next;
+      });
+    } else {
+      setStudies((items) => {
+        const next = items.filter((item) => item.id !== deleteTarget.id);
+        window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+        return next;
+      });
+    }
+    setDeleteTarget(null);
   }
   return (
     <>
@@ -550,9 +579,14 @@ export default function CatalystView() {
                         {h.description}
                       </small>
                     </span>
-                    <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
-                      {h.status}
-                    </em>
+                  <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
+                    {h.status}
+                  </em>
+                  {h.id.startsWith('h-local-') && (
+                    <button type="button" aria-label={`Remove ${h.title}`} onClick={() => setDeleteTarget({ kind: 'hypothesis', id: h.id, title: h.title })} className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-red-950/40 hover:text-red-300">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                   </div>
                 ))}
               </ResearchCard>
@@ -573,9 +607,14 @@ export default function CatalystView() {
                         {s.owner} · updated {s.updatedAt}
                       </small>
                     </span>
-                    <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
-                      {s.state}
-                    </em>
+                  <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
+                    {s.state}
+                  </em>
+                  {s.id.startsWith('study-local-') && (
+                    <button type="button" aria-label={`Remove ${s.title}`} onClick={() => setDeleteTarget({ kind: 'study', id: s.id, title: s.title })} className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-red-950/40 hover:text-red-300">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                   </div>
                 ))}
               </ResearchCard>
@@ -616,6 +655,18 @@ export default function CatalystView() {
         onOpenChange={(open) => !open && setDraftKind(null)}
         onSave={saveDraft}
       />
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100">Remove local draft?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">“{deleteTarget?.title}” will be removed from this device. SEC-backed fixture records are not affected.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800 hover:text-slate-100">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-500 text-white hover:bg-red-400">Remove draft</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
