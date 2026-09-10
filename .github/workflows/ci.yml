@@ -23,6 +23,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Lint app source
-        run: npx oxlint app lib
+        run: npx oxlint app lib scripts
       - name: Build
         run: npm run build
+      - name: Deployment preflight
+        run: npm run preflight

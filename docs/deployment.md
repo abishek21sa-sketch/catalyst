@@ -10,6 +10,7 @@
 ## Current readiness
 
 - `npm run build` produces a Cloudflare-compatible Worker build with `/api/sec`.
+- `npm run preflight` verifies the hosting manifest, SEC fixture/route, and required Worker artifacts after the build.
 - App-specific lint is covered by CI; the generated component catalog remains outside that check because it carries starter lint findings.
 - The SEC route is live-optional and falls back to the local fixture.
 - No GitHub repository has been created or pushed to yet.
@@ -22,5 +23,18 @@
 3. Verify `/` and `/api/sec?cik=0000789019` in the preview.
 4. Choose Vercel for the server-capable app, or Render static only if the live route is disabled.
 5. Add a custom domain and production secrets only after the preview is healthy.
+
+## Local release gate
+
+Run the following before connecting a provider or creating a release:
+
+```bash
+npm ci
+npx oxlint app lib scripts
+npm run build
+npm run preflight
+```
+
+The preflight is intentionally offline. It catches incomplete local builds and missing deployment metadata without exporting source or calling a hosting provider.
 
 Deployment remains intentionally separate from the research product scope: no broker credentials, trading endpoints, or production data writes are included.
