@@ -21,3 +21,5 @@ The workspace loads a deterministic Microsoft FY24 SEC EDGAR fixture through `li
 Explicitly out of scope: live ingestion, authentication, persistence, portfolio construction, trading, alerts, and a full backtesting engine.
 
 See [`docs/phase-1.md`](docs/phase-1.md) for the boundary and next phases.
+
+See [`docs/deployment.md`](docs/deployment.md) for the GitHub, Vercel, Render, and Sites deployment plan.
