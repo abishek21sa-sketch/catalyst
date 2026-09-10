@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowUpRight,
@@ -102,6 +102,22 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
+  useEffect(() => {
+    try {
+      const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
+      const savedStudies = window.localStorage.getItem('catalyst:studies');
+      if (savedHypotheses) {
+        const parsedHypotheses = JSON.parse(savedHypotheses);
+        setTimeout(() => setHypotheses(parsedHypotheses), 0);
+      }
+      if (savedStudies) {
+        const parsedStudies = JSON.parse(savedStudies);
+        setTimeout(() => setStudies(parsedStudies), 0);
+      }
+    } catch {
+      // Device storage is optional; the fixture remains the safe default.
+    }
+  }, []);
   const selected = useMemo(
     () =>
       snapshot.events.find((event) => event.id === selectedId) ??
@@ -154,26 +170,17 @@ export default function CatalystView() {
   }
   function saveDraft(title: string, description: string) {
     if (draftKind === 'hypothesis') {
-      setHypotheses((items) => [
-        ...items,
-        {
-          id: `h-local-${Date.now()}`,
-          title,
-          status: 'testing',
-          description: description || 'Draft hypothesis queued for evidence.',
-        },
-      ]);
+      setHypotheses((items) => {
+        const next = [...items, { id: `h-local-${Date.now()}`, title, status: 'testing' as const, description: description || 'Draft hypothesis queued for evidence.' }];
+        window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+        return next;
+      });
     } else if (draftKind === 'study') {
-      setStudies((items) => [
-        ...items,
-        {
-          id: `study-local-${Date.now()}`,
-          title,
-          owner: 'AT',
-          state: 'active',
-          updatedAt: 'Just now',
-        },
-      ]);
+      setStudies((items) => {
+        const next = [...items, { id: `study-local-${Date.now()}`, title, owner: 'AT', state: 'active' as const, updatedAt: 'Just now' }];
+        window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+        return next;
+      });
     }
     setDraftKind(null);
   }
