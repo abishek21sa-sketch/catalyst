@@ -147,13 +147,16 @@ export default function CatalystView() {
   );
   function changeEventFilter(nextFilter: EventFilter) {
     setEventFilter(nextFilter);
+    setActiveNav(nextFilter === 'all' ? 'Event stream' : nextFilter === 'filing' ? 'Filings' : nextFilter === 'metric' ? 'Metrics' : 'Hypotheses');
     const nextEvents = nextFilter === 'all' ? snapshot.events : snapshot.events.filter((event) => event.kind === nextFilter);
     if (!nextEvents.some((event) => event.id === selectedId) && nextEvents[0]) setSelectedId(nextEvents[0].id);
   }
   function navigateTo(label: NavLabel) {
     setActiveNav(label);
+    setMenuOpen(false);
     if (label === 'Overview') {
       changeEventFilter('all');
+      setActiveNav('Overview');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -236,7 +239,16 @@ export default function CatalystView() {
   return (
     <>
       <main className="min-h-screen bg-[#090e13] text-slate-100 antialiased selection:bg-emerald-300 selection:text-slate-950">
+        {menuOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setMenuOpen(false)}
+            className="fixed inset-0 z-10 bg-slate-950/70 lg:hidden"
+          />
+        )}
         <aside
+          id="primary-navigation"
           className={`fixed inset-y-0 left-0 z-20 flex w-60 flex-col border-r border-slate-800 bg-[#090e13] px-4 py-6 transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}
         >
           <div className="flex items-center gap-2 px-2 pb-8 text-lg font-bold tracking-tight">
@@ -309,6 +321,8 @@ export default function CatalystView() {
               type="button"
               className="mr-3 text-slate-300 lg:hidden"
               aria-label="Open navigation"
+              aria-controls="primary-navigation"
+              aria-expanded={menuOpen}
               onClick={() => setMenuOpen(!menuOpen)}
             >
               <Menu size={20} />
