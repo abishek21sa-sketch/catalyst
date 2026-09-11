@@ -56,6 +56,7 @@ const kindLabel: Record<Event['kind'], string> = {
   hypothesis: 'Hypothesis',
 };
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
+type NavLabel = (typeof nav)[number][0];
 
 function EventRow({
   event,
@@ -108,6 +109,7 @@ export default function CatalystView() {
   >('fixture');
   const [metrics, setMetrics] = useState(snapshot.metrics);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
+  const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
   const [draftKind, setDraftKind] = useState<'hypothesis' | 'study' | null>(
     null,
   );
@@ -147,6 +149,19 @@ export default function CatalystView() {
     setEventFilter(nextFilter);
     const nextEvents = nextFilter === 'all' ? snapshot.events : snapshot.events.filter((event) => event.kind === nextFilter);
     if (!nextEvents.some((event) => event.id === selectedId) && nextEvents[0]) setSelectedId(nextEvents[0].id);
+  }
+  function navigateTo(label: NavLabel) {
+    setActiveNav(label);
+    if (label === 'Overview') {
+      changeEventFilter('all');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (label === 'Filings') changeEventFilter('filing');
+    if (label === 'Metrics') changeEventFilter('metric');
+    if (label === 'Event stream') changeEventFilter('all');
+    const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : 'event-stream';
+    document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   const netMargin = margin(metrics[2].value, metrics[0].value);
   async function refreshSource() {
@@ -256,7 +271,9 @@ export default function CatalystView() {
               <button
                 type="button"
                 key={label}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] ${label === 'Overview' ? 'bg-[#16232a] text-slate-100 shadow-[inset_2px_0_#7de4bb]' : 'text-slate-400 hover:bg-white/[.03] hover:text-slate-100'}`}
+                aria-current={label === activeNav ? 'page' : undefined}
+                onClick={() => navigateTo(label)}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] ${label === activeNav ? 'bg-[#16232a] text-slate-100 shadow-[inset_2px_0_#7de4bb]' : 'text-slate-400 hover:bg-white/[.03] hover:text-slate-100'}`}
               >
                 <Icon size={17} />
                 <span>{label}</span>
@@ -411,7 +428,7 @@ export default function CatalystView() {
               ))}
             </div>
             <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
-              <section className="rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
+              <section id="event-stream" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">
@@ -563,6 +580,7 @@ export default function CatalystView() {
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
+                id="hypotheses-panel"
                 title="What to test next"
                 kicker="WORKING HYPOTHESES"
               >
@@ -756,16 +774,18 @@ function DraftDialog({
 }
 
 function ResearchCard({
+  id,
   title,
   kicker,
   children,
 }: {
+  id?: string;
   title: string;
   kicker: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-slate-800 bg-[#101820]/75 px-4 pt-5 sm:px-5">
+    <section id={id} className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 px-4 pt-5 sm:px-5">
       <div className="mb-2">
         <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">
           {kicker}
