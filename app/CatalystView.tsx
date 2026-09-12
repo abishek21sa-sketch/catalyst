@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatMetric, loadSecFixture, margin } from '../lib/sec-adapter';
-import type { Event, Filing } from '../lib/domain';
+import type { Event, Filing, Metric } from '../lib/domain';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -207,7 +207,7 @@ export default function CatalystView() {
     if (label === 'Filings') changeEventFilter('filing');
     if (label === 'Metrics') changeEventFilter('metric');
     if (label === 'Event stream') changeEventFilter('all');
-    const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : label === 'Filings' ? 'filings-panel' : 'event-stream';
+    const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : label === 'Filings' ? 'filings-panel' : label === 'Metrics' ? 'metrics-panel' : 'event-stream';
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function selectSearchResult(result: SearchResult) {
@@ -654,6 +654,9 @@ export default function CatalystView() {
               <FilingCard filings={snapshot.filings} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
+              <MetricsCard metrics={metrics} />
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
                 id="hypotheses-panel"
                 title="What to test next"
@@ -815,6 +818,37 @@ function FilingCard({ filings }: { filings: Filing[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function MetricsCard({ metrics }: { metrics: Metric[] }) {
+  return (
+    <section id="metrics-panel" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5 xl:col-span-2">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">NORMALIZED FACTS</span>
+          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Metrics</h2>
+        </div>
+        <span className="text-[11px] text-slate-500">FY24 · USD reported values</span>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {metrics.map((metric) => (
+          <article key={metric.id} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-xs text-slate-400">{metric.label}</span>
+              {metric.yoy !== undefined && (
+                <span className="rounded bg-emerald-300/10 px-1.5 py-1 text-[10px] font-bold text-emerald-300">+{metric.yoy}% YoY</span>
+              )}
+            </div>
+            <strong className="mt-4 block text-2xl tracking-tight">{formatMetric(metric.value)}</strong>
+            <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-2 text-[10px] text-slate-500">
+              <span>{metric.period}</span>
+              <span className="font-mono">{metric.concept}</span>
+            </div>
+          </article>
+        ))}
       </div>
     </section>
   );
