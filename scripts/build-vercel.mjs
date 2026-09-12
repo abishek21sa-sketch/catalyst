@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const functionDirectory = path.join(process.cwd(), '.vercel', 'output', 'functions', 'api', 'sec.func');
@@ -50,4 +50,12 @@ export default async function handler(request) {
 await mkdir(functionDirectory, { recursive: true });
 await writeFile(path.join(functionDirectory, '.vc-config.json'), JSON.stringify({ runtime: 'edge', entrypoint: 'index.mjs' }, null, 2) + '\n');
 await writeFile(path.join(functionDirectory, 'index.mjs'), functionSource);
+
+const outputConfigPath = path.join(process.cwd(), '.vercel', 'output', 'config.json');
+const outputConfig = JSON.parse(await readFile(outputConfigPath, 'utf8'));
+outputConfig.routes = [
+  { src: '^/api/sec(?:/)?$', dest: '/api/sec' },
+  ...(outputConfig.routes ?? []),
+];
+await writeFile(outputConfigPath, JSON.stringify(outputConfig, null, 2) + '\n');
 console.log('Added Vercel Edge Function: /api/sec');
