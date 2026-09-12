@@ -9,6 +9,7 @@ import {
   BrainCircuit,
   ChevronDown,
   CircleHelp,
+  Copy,
   Database,
   Download,
   FileText,
@@ -127,6 +128,7 @@ export default function CatalystView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const [citationMessage, setCitationMessage] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
@@ -271,6 +273,16 @@ export default function CatalystView() {
     } catch {
       setMetrics(snapshot.metrics);
       setSourceState('fallback');
+    }
+  }
+  async function copyCitation() {
+    const sourceUrl = selected.evidence[0]?.sourceUrl ?? '';
+    const citation = `${selected.title} (${selected.date}). ${selected.summary} Source: ${selected.sourceLabel}. ${sourceUrl}`;
+    try {
+      await navigator.clipboard.writeText(citation);
+      setCitationMessage('Citation copied');
+    } catch {
+      setCitationMessage('Copy unavailable');
     }
   }
   function saveDraft(title: string, description: string) {
@@ -737,14 +749,24 @@ export default function CatalystView() {
                     </small>
                   </span>
                 </div>
-                <a
-                  href={selected.evidence[0].sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-flex items-center gap-1.5 text-[11px] text-emerald-300 no-underline"
-                >
-                  Open source filing <ArrowUpRight size={14} />
-                </a>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <a
+                    href={selected.evidence[0].sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[11px] text-emerald-300 no-underline"
+                  >
+                    Open source filing <ArrowUpRight size={14} />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={copyCitation}
+                    className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                  >
+                    <Copy size={12} /> Copy citation
+                  </button>
+                  {citationMessage && <output className="text-[10px] text-emerald-300">{citationMessage}</output>}
+                </div>
               </aside>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
