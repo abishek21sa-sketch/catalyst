@@ -4,13 +4,13 @@
 
 1. **GitHub — canonical source.** Create a private GitHub repository and push the local `main` history. GitHub’s documented flow supports adding an existing local repository and pushing it with GitHub CLI or Git.
 2. **Sites — private product preview.** Keep the current private Sites deployment for review while the product is still in early development.
-3. **Vercel — public app candidate.** Vercel supports Git-connected Vite deployments and creates preview deployments for commits and pull requests. Catalyst now includes the Nitro Vercel adapter and a dedicated `.output` build path, plus a Vercel Edge Function for `/api/sec`.
+3. **Vercel — public app candidate.** Vercel supports Git-connected Vite deployments and creates preview deployments for commits and pull requests. Catalyst now includes the Nitro Vercel adapter and a dedicated `.output` build path with a native Nitro server route for `/api/sec`.
 4. **Render — static or service option.** Render’s static-site path is a good fit for the fixture-only frontend (`npm run build`, publish `dist`), but the current `/api/sec` route needs a compatible server runtime. Use Render after either adding a Node adapter or intentionally shipping a static-only mode.
 
 ## Current readiness
 
 - `npm run build` produces a Cloudflare-compatible Worker build with `/api/sec`.
-- `npm run build:vercel` produces the Nitro `.output` build used by Vercel and emits the `/api/sec` Edge Function under the Vercel Build Output API.
+- `npm run build:vercel` produces the Nitro `.output` build used by Vercel and includes the `/api/sec` server route in the Nitro function.
 - `npm run preflight` verifies the hosting manifest, SEC fixture/route, and required Worker artifacts after the build.
 - App-specific lint is covered by CI; the generated component catalog remains outside that check because it carries starter lint findings.
 - The SEC route is live-optional and falls back to the local fixture.

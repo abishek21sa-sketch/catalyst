@@ -51,7 +51,7 @@ export default defineConfig(async () => {
   };
 
   if (isVercelBuild) {
-    return { ...sharedConfig, plugins: [vinext(), nitro()] };
+    return { ...sharedConfig, plugins: [vinext(), nitro({ scanDirs: ['./server'] })] };
   }
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
