@@ -10,6 +10,7 @@ import {
   ChevronDown,
   CircleHelp,
   Database,
+  Download,
   FileText,
   FlaskConical,
   Layers3,
@@ -306,6 +307,24 @@ export default function CatalystView() {
       window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
       return next;
     });
+  }
+  function exportWorkspace() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      company: snapshot.company,
+      filings: snapshot.filings,
+      metrics,
+      events: snapshot.events,
+      hypotheses,
+      studies,
+      provenance: snapshot.provenance,
+    };
+    const downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-research.json`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
   }
   return (
     <>
@@ -761,6 +780,13 @@ export default function CatalystView() {
                       : sourceState === 'fallback'
                         ? 'Using fixture fallback'
                         : 'Refresh source'}
+                </button>
+                <button
+                  type="button"
+                  onClick={exportWorkspace}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                >
+                  <Download size={12} /> Export workspace
                 </button>
               </div>
               <span>Phase 1 · Foundation &amp; vertical slice</span>
