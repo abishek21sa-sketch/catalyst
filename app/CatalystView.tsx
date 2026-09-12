@@ -233,6 +233,10 @@ export default function CatalystView() {
     document.getElementById(result.kind === 'study' ? 'research-queue' : 'hypotheses-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   const netMargin = margin(metrics[2].value, metrics[0].value);
+  const openHypotheses = hypotheses.filter((hypothesis) => hypothesis.status !== 'parked').length;
+  const activeStudies = studies.filter((study) => study.state === 'active').length;
+  const evidenceBackedEvents = snapshot.events.filter((event) => event.evidence.length > 0).length;
+  const sourceDescription = sourceState === 'live' ? 'Live SEC source' : sourceState === 'fallback' ? 'Fixture fallback' : 'Verified fixture';
   async function refreshSource() {
     setSourceState('loading');
     try {
@@ -566,6 +570,32 @@ export default function CatalystView() {
                 </div>
               ))}
             </div>
+            <section className="mt-4 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
+              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+                <div>
+                  <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">WORKSPACE PULSE</span>
+                  <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Research health</h2>
+                </div>
+                <span className="text-[11px] text-slate-500">Updated from the current evidence graph</span>
+              </div>
+              <div className="mt-4 grid gap-2 md:grid-cols-4">
+                {[
+                  { label: 'Open hypotheses', value: `${openHypotheses}/${hypotheses.length}`, detail: 'Need a next decision', icon: <BrainCircuit size={15} /> },
+                  { label: 'Active studies', value: `${activeStudies}/${studies.length}`, detail: 'Currently in motion', icon: <FlaskConical size={15} /> },
+                  { label: 'Evidence coverage', value: `${evidenceBackedEvents}/${snapshot.events.length}`, detail: 'Events with sources', icon: <FileText size={15} /> },
+                  { label: 'Source freshness', value: sourceState === 'live' ? 'Live' : 'Ready', detail: sourceDescription, icon: <Database size={15} /> },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3 rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-emerald-950 text-emerald-300">{item.icon}</span>
+                    <span className="grid min-w-0 gap-0.5">
+                      <small className="truncate text-[10px] uppercase tracking-[.08em] text-slate-500">{item.label}</small>
+                      <strong className="text-lg leading-tight tracking-tight text-slate-200">{item.value}</strong>
+                      <span className="truncate text-[10px] text-slate-500">{item.detail}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
             <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <section id="event-stream" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
                 <div className="flex items-start justify-between">
