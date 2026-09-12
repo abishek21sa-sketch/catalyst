@@ -293,6 +293,20 @@ export default function CatalystView() {
     }
     setDeleteTarget(null);
   }
+  function advanceHypothesis(id: string) {
+    setHypotheses((items) => {
+      const next = items.map((item) => item.id === id ? { ...item, status: item.status === 'testing' ? 'supported' as const : item.status === 'supported' ? 'parked' as const : 'testing' as const } : item);
+      window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+      return next;
+    });
+  }
+  function toggleStudyState(id: string) {
+    setStudies((items) => {
+      const next = items.map((item) => item.id === id ? { ...item, state: item.state === 'active' ? 'queued' as const : 'active' as const, updatedAt: 'Just now' } : item);
+      window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+      return next;
+    });
+  }
   return (
     <>
       <main className="min-h-screen bg-[#090e13] text-slate-100 antialiased selection:bg-emerald-300 selection:text-slate-950">
@@ -681,6 +695,9 @@ export default function CatalystView() {
                   <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
                     {h.status}
                   </em>
+                  <button type="button" onClick={() => advanceHypothesis(h.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
+                    {h.status === 'testing' ? 'Support' : h.status === 'supported' ? 'Park' : 'Reopen'}
+                  </button>
                   {h.id.startsWith('h-local-') && (
                     <button type="button" aria-label={`Remove ${h.title}`} onClick={() => setDeleteTarget({ kind: 'hypothesis', id: h.id, title: h.title })} className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-red-950/40 hover:text-red-300">
                       <Trash2 size={13} />
@@ -709,6 +726,9 @@ export default function CatalystView() {
                   <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
                     {s.state}
                   </em>
+                  <button type="button" onClick={() => toggleStudyState(s.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
+                    {s.state === 'active' ? 'Queue' : 'Start'}
+                  </button>
                   {s.id.startsWith('study-local-') && (
                     <button type="button" aria-label={`Remove ${s.title}`} onClick={() => setDeleteTarget({ kind: 'study', id: s.id, title: s.title })} className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-red-950/40 hover:text-red-300">
                       <Trash2 size={13} />
