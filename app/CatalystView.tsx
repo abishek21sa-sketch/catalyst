@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { formatMetric, loadSecFixture, margin } from '../lib/sec-adapter';
-import type { Event } from '../lib/domain';
+import type { Event, Filing } from '../lib/domain';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -207,7 +207,7 @@ export default function CatalystView() {
     if (label === 'Filings') changeEventFilter('filing');
     if (label === 'Metrics') changeEventFilter('metric');
     if (label === 'Event stream') changeEventFilter('all');
-    const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : 'event-stream';
+    const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : label === 'Filings' ? 'filings-panel' : 'event-stream';
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   function selectSearchResult(result: SearchResult) {
@@ -651,6 +651,9 @@ export default function CatalystView() {
               </aside>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
+              <FilingCard filings={snapshot.filings} />
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
                 id="hypotheses-panel"
                 title="What to test next"
@@ -772,6 +775,48 @@ export default function CatalystView() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function FilingCard({ filings }: { filings: Filing[] }) {
+  return (
+    <section id="filings-panel" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5 xl:col-span-2">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">SOURCE ARCHIVE</span>
+          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Filings</h2>
+        </div>
+        <span className="text-[11px] text-slate-500">{filings.length} linked filing{filings.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[650px] border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b border-slate-800 text-[10px] uppercase tracking-[.12em] text-slate-600">
+              <th className="px-2 py-2 font-semibold">Form</th>
+              <th className="px-2 py-2 font-semibold">Filed</th>
+              <th className="px-2 py-2 font-semibold">Period end</th>
+              <th className="px-2 py-2 font-semibold">Accession</th>
+              <th className="px-2 py-2 text-right font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filings.map((filing) => (
+              <tr key={filing.id} className="border-b border-slate-800/70 last:border-0">
+                <td className="px-2 py-3 font-semibold text-slate-200">{filing.form}</td>
+                <td className="px-2 py-3 text-slate-400">{filing.filedAt}</td>
+                <td className="px-2 py-3 text-slate-400">{filing.periodEnd}</td>
+                <td className="px-2 py-3 font-mono text-[11px] text-slate-500">{filing.accession}</td>
+                <td className="px-2 py-3 text-right">
+                  <a href={filing.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded bg-emerald-300/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-300 no-underline hover:bg-emerald-300/20">
+                    {filing.status === 'fixture' ? 'Verified fixture' : 'Verified'} <ArrowUpRight size={12} />
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
