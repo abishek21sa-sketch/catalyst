@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   Activity,
   ArrowUpRight,
@@ -20,6 +20,7 @@ import {
   Sparkles,
   Target,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import { formatMetric, loadSecFixture, margin } from '../lib/sec-adapter';
@@ -125,10 +126,17 @@ export default function CatalystView() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
+  const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
       const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
       const savedStudies = window.localStorage.getItem('catalyst:studies');
+      const savedMetrics = window.localStorage.getItem('catalyst:metrics');
+      if (savedMetrics) {
+        const parsedMetrics = JSON.parse(savedMetrics);
+        if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
+      }
       if (savedHypotheses) {
         const parsedHypotheses = JSON.parse(savedHypotheses);
         setTimeout(() => setHypotheses(parsedHypotheses), 0);
@@ -325,6 +333,32 @@ export default function CatalystView() {
     link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-research.json`;
     link.click();
     URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: 'Workspace exported' });
+  }
+  async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const payload = JSON.parse(await file.text()) as {
+        company?: { cik?: string };
+        metrics?: typeof snapshot.metrics;
+        hypotheses?: typeof snapshot.hypotheses;
+        studies?: typeof snapshot.studies;
+      };
+      if (payload.company?.cik !== snapshot.company.cik || !Array.isArray(payload.metrics) || !Array.isArray(payload.hypotheses) || !Array.isArray(payload.studies)) {
+        throw new Error('Unsupported workspace file');
+      }
+      setMetrics(payload.metrics);
+      setHypotheses(payload.hypotheses);
+      setStudies(payload.studies);
+      window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
+      window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(payload.hypotheses));
+      window.localStorage.setItem('catalyst:studies', JSON.stringify(payload.studies));
+      setWorkspaceMessage({ text: 'Workspace imported' });
+    } catch {
+      setWorkspaceMessage({ text: 'Import failed: choose a Catalyst MSFT export', error: true });
+    }
   }
   return (
     <>
@@ -788,6 +822,15 @@ export default function CatalystView() {
                 >
                   <Download size={12} /> Export workspace
                 </button>
+                <button
+                  type="button"
+                  onClick={() => importInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                >
+                  <Upload size={12} /> Import workspace
+                </button>
+                <input ref={importInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden" />
+                {workspaceMessage && <output className={`text-[10px] ${workspaceMessage.error ? 'text-red-300' : 'text-emerald-300'}`}>{workspaceMessage.text}</output>}
               </div>
               <span>Phase 1 · Foundation &amp; vertical slice</span>
             </footer>
