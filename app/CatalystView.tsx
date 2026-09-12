@@ -351,6 +351,41 @@ export default function CatalystView() {
     URL.revokeObjectURL(downloadUrl);
     setWorkspaceMessage({ text: 'Workspace exported' });
   }
+  function exportBrief() {
+    const brief = [
+      `# ${snapshot.company.name} (${snapshot.company.ticker}) Research Brief`,
+      `Exported ${new Date().toISOString()}`,
+      '',
+      '## Snapshot',
+      `- Sector: ${snapshot.company.sector}`,
+      `- Exchange: ${snapshot.company.exchange}`,
+      `- Source: ${sourceDescription}`,
+      '',
+      '## Metrics',
+      ...metrics.map((metric) => `- **${metric.label}:** ${formatMetric(metric.value)} (${metric.period})`),
+      '',
+      '## Evidence stream',
+      ...snapshot.events.map((event) => `- **${event.title}** (${event.date}) — ${event.summary} _${event.sourceLabel}_`),
+      '',
+      '## Working hypotheses',
+      ...hypotheses.map((hypothesis) => `- **${hypothesis.title}** [${hypothesis.status}] — ${hypothesis.description}`),
+      '',
+      '## Study queue',
+      ...studies.map((study) => `- **${study.title}** [${study.state}] — ${study.owner}, updated ${study.updatedAt}`),
+      '',
+      '## Provenance',
+      `- Adapter: ${snapshot.provenance.adapter}`,
+      `- Captured: ${snapshot.provenance.capturedAt}`,
+      `- Filing: ${snapshot.filings[0]?.sourceUrl ?? 'Unavailable'}`,
+    ].join('\n');
+    const downloadUrl = URL.createObjectURL(new Blob([brief], { type: 'text/markdown' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-research-brief.md`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: 'Markdown brief exported' });
+  }
   async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -873,6 +908,13 @@ export default function CatalystView() {
                   className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
                 >
                   <Download size={12} /> Export workspace
+                </button>
+                <button
+                  type="button"
+                  onClick={exportBrief}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                >
+                  <FileText size={12} /> Export brief
                 </button>
                 <button
                   type="button"
