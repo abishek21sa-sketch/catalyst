@@ -57,6 +57,12 @@ const kindLabel: Record<Event['kind'], string> = {
 };
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type NavLabel = (typeof nav)[number][0];
+type SearchResult = {
+  id: string;
+  kind: 'event' | 'hypothesis' | 'study';
+  title: string;
+  meta: string;
+};
 
 function EventRow({
   event,
@@ -115,6 +121,8 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   useEffect(() => {
     try {
@@ -132,6 +140,16 @@ export default function CatalystView() {
       // Device storage is optional; the fixture remains the safe default.
     }
   }, []);
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
   const selected = useMemo(
     () =>
       snapshot.events.find((event) => event.id === selectedId) ??
@@ -145,6 +163,32 @@ export default function CatalystView() {
         : snapshot.events.filter((event) => event.kind === eventFilter),
     [eventFilter],
   );
+  const searchResults = useMemo<SearchResult[]>(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const results: SearchResult[] = [
+      ...snapshot.events.map((event) => ({
+        id: event.id,
+        kind: 'event' as const,
+        title: event.title,
+        meta: `${kindLabel[event.kind]} · ${event.date}`,
+      })),
+      ...hypotheses.map((hypothesis) => ({
+        id: hypothesis.id,
+        kind: 'hypothesis' as const,
+        title: hypothesis.title,
+        meta: `Hypothesis · ${hypothesis.status}`,
+      })),
+      ...studies.map((study) => ({
+        id: study.id,
+        kind: 'study' as const,
+        title: study.title,
+        meta: `Study · ${study.state}`,
+      })),
+    ];
+    return query
+      ? results.filter((result) => `${result.title} ${result.meta}`.toLowerCase().includes(query)).slice(0, 8)
+      : results.slice(0, 8);
+  }, [hypotheses, searchQuery, studies]);
   function changeEventFilter(nextFilter: EventFilter) {
     setEventFilter(nextFilter);
     setActiveNav(nextFilter === 'all' ? 'Event stream' : nextFilter === 'filing' ? 'Filings' : nextFilter === 'metric' ? 'Metrics' : 'Hypotheses');
@@ -165,6 +209,19 @@ export default function CatalystView() {
     if (label === 'Event stream') changeEventFilter('all');
     const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : 'event-stream';
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function selectSearchResult(result: SearchResult) {
+    setSearchOpen(false);
+    setSearchQuery('');
+    if (result.kind === 'event') {
+      setSelectedId(result.id);
+      setEventFilter('all');
+      setActiveNav('Event stream');
+      document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    setActiveNav('Hypotheses');
+    document.getElementById(result.kind === 'study' ? 'research-queue' : 'hypotheses-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   const netMargin = margin(metrics[2].value, metrics[0].value);
   async function refreshSource() {
@@ -337,6 +394,7 @@ export default function CatalystView() {
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
+                onClick={() => setSearchOpen(true)}
                 className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-xs text-slate-500"
               >
                 <Search size={16} />
@@ -625,7 +683,7 @@ export default function CatalystView() {
                   </div>
                 ))}
               </ResearchCard>
-              <ResearchCard title="Research queue" kicker="ACTIVE STUDIES">
+              <ResearchCard id="research-queue" title="Research queue" kicker="ACTIVE STUDIES">
                 {studies.map((s) => (
                   <div
                     className="flex items-center gap-2.5 border-t border-slate-800/80 py-3.5"
@@ -690,6 +748,17 @@ export default function CatalystView() {
         onOpenChange={(open) => !open && setDraftKind(null)}
         onSave={saveDraft}
       />
+      <SearchDialog
+        open={searchOpen}
+        query={searchQuery}
+        results={searchResults}
+        onQueryChange={setSearchQuery}
+        onOpenChange={(open) => {
+          setSearchOpen(open);
+          if (!open) setSearchQuery('');
+        }}
+        onSelect={selectSearchResult}
+      />
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
           <AlertDialogHeader>
@@ -703,6 +772,69 @@ export default function CatalystView() {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function SearchDialog({
+  open,
+  query,
+  results,
+  onQueryChange,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean;
+  query: string;
+  results: SearchResult[];
+  onQueryChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (result: SearchResult) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border border-slate-800 bg-[#101820] p-0 text-slate-100 sm:max-w-lg">
+        <DialogHeader className="border-b border-slate-800 px-4 py-4">
+          <DialogTitle className="text-slate-100">Search research</DialogTitle>
+          <DialogDescription className="text-slate-400">
+            Jump to an event, working hypothesis, or study.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="border-b border-slate-800 px-4 py-3">
+          <label className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#0b1319] px-3 py-2.5 text-sm text-slate-300 focus-within:border-emerald-300">
+            <Search size={16} className="text-slate-500" />
+            <span className="sr-only">Search research</span>
+            <input
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search evidence, signals, or studies…"
+              className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-slate-600"
+            />
+            <kbd className="hidden rounded border border-slate-700 px-1.5 py-0.5 text-[10px] text-slate-500 sm:block">Esc</kbd>
+          </label>
+        </div>
+        <div className="max-h-80 overflow-y-auto p-2">
+          {results.length ? results.map((result) => (
+            <button
+              type="button"
+              key={`${result.kind}-${result.id}`}
+              onClick={() => onSelect(result)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-emerald-300/[.06]"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-700 bg-[#0b1319] text-emerald-300">
+                {result.kind === 'event' ? <Activity size={15} /> : result.kind === 'hypothesis' ? <BrainCircuit size={15} /> : <FlaskConical size={15} />}
+              </span>
+              <span className="grid min-w-0 flex-1 gap-1">
+                <strong className="truncate text-xs font-semibold text-slate-200">{result.title}</strong>
+                <small className="text-[11px] text-slate-500">{result.meta}</small>
+              </span>
+              <ArrowUpRight size={15} className="shrink-0 text-slate-600" />
+            </button>
+          )) : (
+            <p className="px-3 py-8 text-center text-xs text-slate-500">No matching research found.</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
