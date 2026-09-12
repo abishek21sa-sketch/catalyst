@@ -14,8 +14,8 @@
 - `npm run preflight` verifies the hosting manifest, SEC fixture/route, and required Worker artifacts after the build.
 - App-specific lint is covered by CI; the generated component catalog remains outside that check because it carries starter lint findings.
 - The SEC route is live-optional and falls back to the local fixture.
-- No GitHub repository has been created or pushed to yet.
-- No Vercel or Render project has been connected.
+- The GitHub repository is connected to Vercel; pushes to `main` use the checked-in Vercel build settings.
+- Render remains unconnected and is still a future alternative.
 
 ## Safe rollout order
 
