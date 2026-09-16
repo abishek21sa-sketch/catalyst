@@ -64,6 +64,7 @@ const kindLabel: Record<Event['kind'], string> = {
   hypothesis: 'Hypothesis',
 };
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
+type SignalFilter = 'all' | Event['signal'];
 type NavLabel = (typeof nav)[number][0];
 type SearchResult = {
   id: string;
@@ -130,6 +131,7 @@ export default function CatalystView() {
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [filings, setFilings] = useState(snapshot.filings);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
+  const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
   const [draftKind, setDraftKind] = useState<'hypothesis' | 'study' | null>(
     null,
@@ -191,10 +193,11 @@ export default function CatalystView() {
   );
   const visibleEvents = useMemo(
     () =>
-      eventFilter === 'all'
-        ? snapshot.events
-        : snapshot.events.filter((event) => event.kind === eventFilter),
-    [eventFilter],
+      snapshot.events.filter((event) =>
+        (eventFilter === 'all' || event.kind === eventFilter) &&
+        (signalFilter === 'all' || event.signal === signalFilter),
+      ),
+    [eventFilter, signalFilter],
   );
   const searchResults = useMemo<SearchResult[]>(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -249,6 +252,7 @@ export default function CatalystView() {
     if (result.kind === 'event') {
       setSelectedId(result.id);
       setEventFilter('all');
+      setSignalFilter('all');
       setActiveNav('Event stream');
       document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -706,19 +710,34 @@ export default function CatalystView() {
                       Event stream
                     </h2>
                   </div>
-                  <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
-                    <span className="sr-only">Filter event stream</span>
-                    <select
-                      value={eventFilter}
-                    onChange={(event) => changeEventFilter(event.target.value as EventFilter)}
-                      className="bg-transparent text-[11px] text-slate-400 outline-none"
-                    >
-                      <option value="all">All events</option>
-                      <option value="filing">Filings</option>
-                      <option value="metric">Metric signals</option>
-                      <option value="hypothesis">Hypotheses</option>
-                    </select>
-                  </label>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
+                      <span className="sr-only">Filter event kind</span>
+                      <select
+                        value={eventFilter}
+                        onChange={(event) => changeEventFilter(event.target.value as EventFilter)}
+                        className="bg-transparent text-[11px] text-slate-400 outline-none"
+                      >
+                        <option value="all">All events</option>
+                        <option value="filing">Filings</option>
+                        <option value="metric">Metric signals</option>
+                        <option value="hypothesis">Hypotheses</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
+                      <span className="sr-only">Filter event signal</span>
+                      <select
+                        value={signalFilter}
+                        onChange={(event) => setSignalFilter(event.target.value as SignalFilter)}
+                        className="bg-transparent text-[11px] text-slate-400 outline-none"
+                      >
+                        <option value="all">All signals</option>
+                        <option value="positive">Positive</option>
+                        <option value="watch">Watch</option>
+                        <option value="neutral">Neutral</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
                 <div className="mt-5 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
                   <span>
