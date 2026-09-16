@@ -33,8 +33,8 @@ export function loadSecFixture(): ResearchSnapshot {
       { id: 'h-ai-moat', title: 'AI infrastructure can widen the moat', status: 'testing', description: 'Track capex, Azure growth, and margin response across subsequent filings.', evidenceIds: ['hypothesis-ai-capex'] },
       { id: 'h-breadth', title: 'Growth broadens beyond the cloud', status: 'parked', description: 'Needs segment-level evidence before it can move into a study.', evidenceIds: [] },
     ], studies: [
-      { id: 'study-cloud', title: 'Cloud monetization watch', owner: 'AT', state: 'active', updatedAt: '2h ago' },
-      { id: 'study-margin', title: 'Margin durability screen', owner: 'ML', state: 'queued', updatedAt: 'Yesterday' },
+      { id: 'study-cloud', title: 'Cloud monetization watch', owner: 'AT', state: 'active', updatedAt: '2h ago', evidenceIds: ['metric-growth-2024'] },
+      { id: 'study-margin', title: 'Margin durability screen', owner: 'ML', state: 'queued', updatedAt: 'Yesterday', evidenceIds: ['metric-margin-2024'] },
     ], provenance: { adapter: 'SEC EDGAR company-facts / filing adapter', capturedAt: '2024-07-30T16:06:22Z', fixture: 'fixtures/sec/msft-fy24.json' },
   };
 }

@@ -142,6 +142,7 @@ export default function CatalystView() {
   const [studies, setStudies] = useState(snapshot.studies);
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [hypothesisLinkId, setHypothesisLinkId] = useState('');
+  const [studyLinkId, setStudyLinkId] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [draftEditTarget, setDraftEditTarget] = useState<DraftTarget | null>(null);
@@ -228,6 +229,14 @@ export default function CatalystView() {
     () => hypotheses.filter((hypothesis) => !hypothesis.evidenceIds?.includes(selected.id)),
     [hypotheses, selected.id],
   );
+  const linkedStudies = useMemo(
+    () => studies.filter((study) => study.evidenceIds?.includes(selected.id)),
+    [selected.id, studies],
+  );
+  const linkableStudies = useMemo(
+    () => studies.filter((study) => !study.evidenceIds?.includes(selected.id)),
+    [selected.id, studies],
+  );
   const searchResults = useMemo<SearchResult[]>(() => {
     const query = searchQuery.trim().toLowerCase();
     const results: SearchResult[] = [
@@ -267,6 +276,7 @@ export default function CatalystView() {
       setNoteMessage('');
       setEvidenceLinkMessage('');
       setHypothesisLinkId('');
+      setStudyLinkId('');
     }
   }
   function changeEventFilter(nextFilter: EventFilter) {
@@ -286,6 +296,7 @@ export default function CatalystView() {
     setNoteMessage('');
     setEvidenceLinkMessage('');
     setHypothesisLinkId('');
+    setStudyLinkId('');
   }
   function navigateTo(label: NavLabel) {
     setActiveNav(label);
@@ -312,6 +323,7 @@ export default function CatalystView() {
       setNoteMessage('');
       setEvidenceLinkMessage('');
       setHypothesisLinkId('');
+      setStudyLinkId('');
       setActiveNav('Event stream');
       document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -431,6 +443,28 @@ export default function CatalystView() {
     });
     setEvidenceLinkMessage('Evidence unlinked');
   }
+  function linkSelectedEventToStudy() {
+    if (!studyLinkId) return;
+    setStudies((items) => {
+      const next = items.map((item) => item.id === studyLinkId
+        ? { ...item, evidenceIds: Array.from(new Set([...(item.evidenceIds ?? []), selected.id])) }
+        : item);
+      window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+      return next;
+    });
+    setEvidenceLinkMessage('Evidence linked');
+    setStudyLinkId('');
+  }
+  function unlinkSelectedEventFromStudy(studyId: string) {
+    setStudies((items) => {
+      const next = items.map((item) => item.id === studyId
+        ? { ...item, evidenceIds: (item.evidenceIds ?? []).filter((eventId) => eventId !== selected.id) }
+        : item);
+      window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+      return next;
+    });
+    setEvidenceLinkMessage('Evidence unlinked');
+  }
   function saveDraft(title: string, description: string, editTarget: DraftTarget | null) {
     if (editTarget?.kind === 'hypothesis') {
       setHypotheses((items) => {
@@ -452,7 +486,7 @@ export default function CatalystView() {
       });
     } else if (draftKind === 'study') {
       setStudies((items) => {
-        const next = [...items, { id: `study-local-${Date.now()}`, title, owner: 'AT', state: 'active' as const, updatedAt: 'Just now' }];
+        const next = [...items, { id: `study-local-${Date.now()}`, title, owner: 'AT', state: 'active' as const, updatedAt: 'Just now', evidenceIds: [] }];
         window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
         return next;
       });
@@ -915,6 +949,7 @@ export default function CatalystView() {
                         setSelectedId(event.id);
                         setNoteMessage('');
                         setHypothesisLinkId('');
+                        setStudyLinkId('');
                       }}
                     />
                   )) : (
@@ -954,6 +989,7 @@ export default function CatalystView() {
                       setSelectedId(snapshot.events[0].id);
                       setNoteMessage('');
                       setHypothesisLinkId('');
+                      setStudyLinkId('');
                     }}
                     className="h-7 w-7 text-slate-500 hover:text-slate-200"
                   >
@@ -1102,6 +1138,54 @@ export default function CatalystView() {
                   )}
                   {evidenceLinkMessage && <output className="mt-2 block text-[10px] text-emerald-300">{evidenceLinkMessage}</output>}
                 </div>
+                <div className="mt-4 border-t border-slate-800 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">Study links</span>
+                    <span className="text-[10px] text-slate-600">{linkedStudies.length} connected</span>
+                  </div>
+                  {linkedStudies.length ? (
+                    <div className="mt-2 grid gap-1.5">
+                      {linkedStudies.map((study) => (
+                        <div key={study.id} className="flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/15 px-2.5 py-2">
+                          <FlaskConical size={13} className="shrink-0 text-emerald-300" />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100">{study.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => unlinkSelectedEventFromStudy(study.id)}
+                            className="text-[10px] text-slate-500 hover:text-amber-300"
+                          >
+                            Unlink
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-slate-600">No research study is linked to this event yet.</p>
+                  )}
+                  {linkableStudies.length ? (
+                    <div className="mt-2 flex gap-2">
+                      <select
+                        aria-label="Choose study to link"
+                        value={studyLinkId}
+                        onChange={(event) => setStudyLinkId(event.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-800 bg-[#0b1319] px-2.5 py-2 text-[11px] text-slate-400 outline-none focus:border-emerald-900"
+                      >
+                        <option value="">Link a study…</option>
+                        {linkableStudies.map((study) => <option key={study.id} value={study.id}>{study.title}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!studyLinkId}
+                        onClick={linkSelectedEventToStudy}
+                        className="rounded border border-emerald-900 px-2.5 py-2 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Link
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="mt-2 block text-[10px] text-slate-600">All studies are already linked to this event.</span>
+                  )}
+                </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <a
                     href={selected.evidence[0].sourceUrl}
@@ -1190,6 +1274,9 @@ export default function CatalystView() {
                       </strong>
                       <small className="text-[11px] text-slate-500">
                         {s.owner} · updated {s.updatedAt}
+                      </small>
+                      <small className="text-[10px] text-slate-600">
+                        {s.evidenceIds?.length ?? 0} linked event{(s.evidenceIds?.length ?? 0) === 1 ? '' : 's'}
                       </small>
                     </span>
                   <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
