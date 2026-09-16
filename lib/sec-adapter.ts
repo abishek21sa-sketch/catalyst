@@ -30,8 +30,8 @@ export function loadSecFixture(): ResearchSnapshot {
       { id: 'operating-income', label: 'Operating income', concept: operatingIncome.concept, value: operatingIncome.value, unit: 'USD', period: operatingIncome.period, yoy: 24 },
       { id: 'net-income', label: 'Net income', concept: netIncome.concept, value: netIncome.value, unit: 'USD', period: netIncome.period, yoy: 21 },
     ], events, hypotheses: [
-      { id: 'h-ai-moat', title: 'AI infrastructure can widen the moat', status: 'testing', description: 'Track capex, Azure growth, and margin response across subsequent filings.' },
-      { id: 'h-breadth', title: 'Growth broadens beyond the cloud', status: 'parked', description: 'Needs segment-level evidence before it can move into a study.' },
+      { id: 'h-ai-moat', title: 'AI infrastructure can widen the moat', status: 'testing', description: 'Track capex, Azure growth, and margin response across subsequent filings.', evidenceIds: ['hypothesis-ai-capex'] },
+      { id: 'h-breadth', title: 'Growth broadens beyond the cloud', status: 'parked', description: 'Needs segment-level evidence before it can move into a study.', evidenceIds: [] },
     ], studies: [
       { id: 'study-cloud', title: 'Cloud monetization watch', owner: 'AT', state: 'active', updatedAt: '2h ago' },
       { id: 'study-margin', title: 'Margin durability screen', owner: 'ML', state: 'queued', updatedAt: 'Yesterday' },

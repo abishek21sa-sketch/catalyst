@@ -141,6 +141,7 @@ export default function CatalystView() {
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
+  const [hypothesisLinkId, setHypothesisLinkId] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [draftEditTarget, setDraftEditTarget] = useState<DraftTarget | null>(null);
@@ -148,6 +149,7 @@ export default function CatalystView() {
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [citationMessage, setCitationMessage] = useState('');
   const [noteMessage, setNoteMessage] = useState('');
+  const [evidenceLinkMessage, setEvidenceLinkMessage] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
@@ -218,6 +220,14 @@ export default function CatalystView() {
       ),
     [eventFilter, signalFilter],
   );
+  const linkedHypotheses = useMemo(
+    () => hypotheses.filter((hypothesis) => hypothesis.evidenceIds?.includes(selected.id)),
+    [hypotheses, selected.id],
+  );
+  const linkableHypotheses = useMemo(
+    () => hypotheses.filter((hypothesis) => !hypothesis.evidenceIds?.includes(selected.id)),
+    [hypotheses, selected.id],
+  );
   const searchResults = useMemo<SearchResult[]>(() => {
     const query = searchQuery.trim().toLowerCase();
     const results: SearchResult[] = [
@@ -255,6 +265,8 @@ export default function CatalystView() {
     if (nextEvents.length && !nextEvents.some((event) => event.id === selectedId)) {
       setSelectedId(nextEvents[0].id);
       setNoteMessage('');
+      setEvidenceLinkMessage('');
+      setHypothesisLinkId('');
     }
   }
   function changeEventFilter(nextFilter: EventFilter) {
@@ -272,6 +284,8 @@ export default function CatalystView() {
     setActiveNav('Event stream');
     setSelectedId(snapshot.events[0].id);
     setNoteMessage('');
+    setEvidenceLinkMessage('');
+    setHypothesisLinkId('');
   }
   function navigateTo(label: NavLabel) {
     setActiveNav(label);
@@ -296,6 +310,8 @@ export default function CatalystView() {
       setEventFilter('all');
       setSignalFilter('all');
       setNoteMessage('');
+      setEvidenceLinkMessage('');
+      setHypothesisLinkId('');
       setActiveNav('Event stream');
       document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -392,6 +408,28 @@ export default function CatalystView() {
     setEventNotes(nextNotes);
     window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextNotes));
     setNoteMessage(note ? 'Note saved locally' : 'Note cleared');
+  }
+  function linkSelectedEvent() {
+    if (!hypothesisLinkId) return;
+    setHypotheses((items) => {
+      const next = items.map((item) => item.id === hypothesisLinkId
+        ? { ...item, evidenceIds: Array.from(new Set([...(item.evidenceIds ?? []), selected.id])) }
+        : item);
+      window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+      return next;
+    });
+    setEvidenceLinkMessage('Evidence linked');
+    setHypothesisLinkId('');
+  }
+  function unlinkSelectedEvent(hypothesisId: string) {
+    setHypotheses((items) => {
+      const next = items.map((item) => item.id === hypothesisId
+        ? { ...item, evidenceIds: (item.evidenceIds ?? []).filter((eventId) => eventId !== selected.id) }
+        : item);
+      window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+      return next;
+    });
+    setEvidenceLinkMessage('Evidence unlinked');
   }
   function saveDraft(title: string, description: string, editTarget: DraftTarget | null) {
     if (editTarget?.kind === 'hypothesis') {
@@ -876,6 +914,7 @@ export default function CatalystView() {
                       onSelect={() => {
                         setSelectedId(event.id);
                         setNoteMessage('');
+                        setHypothesisLinkId('');
                       }}
                     />
                   )) : (
@@ -914,6 +953,7 @@ export default function CatalystView() {
                     onClick={() => {
                       setSelectedId(snapshot.events[0].id);
                       setNoteMessage('');
+                      setHypothesisLinkId('');
                     }}
                     className="h-7 w-7 text-slate-500 hover:text-slate-200"
                   >
@@ -1013,6 +1053,55 @@ export default function CatalystView() {
                     </div>
                   </div>
                 </div>
+                <div className="mt-4 border-t border-slate-800 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">Hypothesis links</span>
+                    <span className="text-[10px] text-slate-600">{linkedHypotheses.length} connected</span>
+                  </div>
+                  {linkedHypotheses.length ? (
+                    <div className="mt-2 grid gap-1.5">
+                      {linkedHypotheses.map((hypothesis) => (
+                        <div key={hypothesis.id} className="flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/15 px-2.5 py-2">
+                          <BrainCircuit size={13} className="shrink-0 text-emerald-300" />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100">{hypothesis.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => unlinkSelectedEvent(hypothesis.id)}
+                            className="text-[10px] text-slate-500 hover:text-amber-300"
+                          >
+                            Unlink
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] text-slate-600">No working hypothesis is linked to this event yet.</p>
+                  )}
+                  {linkableHypotheses.length ? (
+                    <div className="mt-2 flex gap-2">
+                      <select
+                        aria-label="Choose hypothesis to link"
+                        value={hypothesisLinkId}
+                        onChange={(event) => setHypothesisLinkId(event.target.value)}
+                        className="min-w-0 flex-1 rounded-lg border border-slate-800 bg-[#0b1319] px-2.5 py-2 text-[11px] text-slate-400 outline-none focus:border-emerald-900"
+                      >
+                        <option value="">Link a hypothesis…</option>
+                        {linkableHypotheses.map((hypothesis) => <option key={hypothesis.id} value={hypothesis.id}>{hypothesis.title}</option>)}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!hypothesisLinkId}
+                        onClick={linkSelectedEvent}
+                        className="rounded border border-emerald-900 px-2.5 py-2 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Link
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="mt-2 block text-[10px] text-slate-600">All hypotheses are already linked to this event.</span>
+                  )}
+                  {evidenceLinkMessage && <output className="mt-2 block text-[10px] text-emerald-300">{evidenceLinkMessage}</output>}
+                </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <a
                     href={selected.evidence[0].sourceUrl}
@@ -1059,6 +1148,9 @@ export default function CatalystView() {
                       </strong>
                       <small className="text-[11px] text-slate-500">
                         {h.description}
+                      </small>
+                      <small className="text-[10px] text-slate-600">
+                        {h.evidenceIds?.length ?? 0} linked event{(h.evidenceIds?.length ?? 0) === 1 ? '' : 's'}
                       </small>
                     </span>
                   <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
