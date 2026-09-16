@@ -46,6 +46,11 @@ import {
 } from '@/components/ui/dialog';
 
 const snapshot = loadSecFixture();
+const fixturePriorMetrics = {
+  revenue: snapshot.metrics[0].value / 1.16,
+  operatingIncome: snapshot.metrics[1].value / 1.24,
+  netIncome: snapshot.metrics[2].value / 1.21,
+};
 const nav = [
   ['Overview', Activity],
   ['Event stream', Layers3],
@@ -117,6 +122,7 @@ export default function CatalystView() {
     'fixture' | 'loading' | 'live' | 'fallback'
   >('fixture');
   const [metrics, setMetrics] = useState(snapshot.metrics);
+  const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [filings, setFilings] = useState(snapshot.filings);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
@@ -136,10 +142,15 @@ export default function CatalystView() {
       const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
       const savedStudies = window.localStorage.getItem('catalyst:studies');
       const savedMetrics = window.localStorage.getItem('catalyst:metrics');
+      const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
       const savedFilings = window.localStorage.getItem('catalyst:filings');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
+      }
+      if (savedPreviousMetrics) {
+        const parsedPreviousMetrics = JSON.parse(savedPreviousMetrics);
+        if (parsedPreviousMetrics && typeof parsedPreviousMetrics === 'object' && !Array.isArray(parsedPreviousMetrics)) setTimeout(() => setPreviousMetrics(parsedPreviousMetrics), 0);
       }
       if (savedFilings) {
         const parsedFilings = JSON.parse(savedFilings);
@@ -241,6 +252,9 @@ export default function CatalystView() {
     document.getElementById(result.kind === 'study' ? 'research-queue' : 'hypotheses-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   const netMargin = margin(metrics[2].value, metrics[0].value);
+  const priorNetMargin = previousMetrics.netIncome && previousMetrics.revenue ? margin(previousMetrics.netIncome, previousMetrics.revenue) : null;
+  const netMarginDelta = priorNetMargin ? `${Number(netMargin) >= Number(priorNetMargin) ? '↗' : '↘'} ${Math.abs((Number(netMargin) - Number(priorNetMargin)) * 100).toFixed(0)} bps YoY` : 'No prior annual fact';
+  const yoyLabel = (metric: Metric) => metric.yoy === undefined ? 'No prior annual fact' : `${metric.yoy >= 0 ? '↗' : '↘'} ${Math.abs(metric.yoy).toFixed(1)}% YoY`;
   const openHypotheses = hypotheses.filter((hypothesis) => hypothesis.status !== 'parked').length;
   const activeStudies = studies.filter((study) => study.state === 'active').length;
   const evidenceBackedEvents = snapshot.events.filter((event) => event.evidence.length > 0).length;
@@ -256,33 +270,41 @@ export default function CatalystView() {
           operatingIncome?: number;
           netIncome?: number;
         };
+        priorMetrics?: Record<string, number>;
+        periods?: Record<string, string>;
         filings?: Filing[];
       };
       if (payload.mode === 'live' && payload.metrics) {
-        setMetrics(
-          snapshot.metrics.map((metric) => ({
+        const nextMetrics = snapshot.metrics.map((metric) => {
+          const key = metric.id === 'revenue' ? 'revenue' : metric.id === 'operating-income' ? 'operatingIncome' : 'netIncome';
+          const value = payload.metrics?.[key] ?? metric.value;
+          const prior = payload.priorMetrics?.[key];
+          return {
             ...metric,
-            value:
-              payload.metrics?.[
-                metric.id === 'revenue'
-                  ? 'revenue'
-                  : metric.id === 'operating-income'
-                    ? 'operatingIncome'
-                    : 'netIncome'
-              ] ?? metric.value,
-          })),
-        );
+            value,
+            period: payload.periods?.[key] ?? metric.period,
+            yoy: prior !== undefined && prior !== 0 ? Number((((value - prior) / prior) * 100).toFixed(1)) : metric.yoy,
+          };
+        });
+        setMetrics(nextMetrics);
+        const nextPreviousMetrics = payload.priorMetrics ?? fixturePriorMetrics;
+        setPreviousMetrics(nextPreviousMetrics);
+        window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(nextPreviousMetrics));
         const nextFilings = payload.filings?.length ? payload.filings : snapshot.filings;
         setFilings(nextFilings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(nextFilings));
         setSourceState('live');
       } else {
         setMetrics(snapshot.metrics);
+        setPreviousMetrics(fixturePriorMetrics);
+        window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
         setFilings(snapshot.filings);
         setSourceState('fallback');
       }
     } catch {
       setMetrics(snapshot.metrics);
+      setPreviousMetrics(fixturePriorMetrics);
+      window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
       setFilings(snapshot.filings);
       setSourceState('fallback');
     }
@@ -350,6 +372,7 @@ export default function CatalystView() {
       company: snapshot.company,
       filings,
       metrics,
+      previousMetrics,
       events: snapshot.events,
       hypotheses,
       studies,
@@ -406,6 +429,7 @@ export default function CatalystView() {
       const payload = JSON.parse(await file.text()) as {
         company?: { cik?: string };
         metrics?: typeof snapshot.metrics;
+        previousMetrics?: Record<string, number>;
         filings?: typeof snapshot.filings;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
@@ -414,6 +438,9 @@ export default function CatalystView() {
         throw new Error('Unsupported workspace file');
       }
       setMetrics(payload.metrics);
+      const nextPreviousMetrics = payload.previousMetrics ?? fixturePriorMetrics;
+      setPreviousMetrics(nextPreviousMetrics);
+      window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(nextPreviousMetrics));
       if (Array.isArray(payload.filings) && payload.filings.length) {
         setFilings(payload.filings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(payload.filings));
@@ -591,13 +618,13 @@ export default function CatalystView() {
             </div>
             <div className="mt-8 grid grid-cols-2 gap-2.5 xl:grid-cols-4">
               {[
-                [`Revenue`, formatMetric(metrics[0].value), '↗ 16.0% YoY'],
+                [`Revenue`, formatMetric(metrics[0].value), yoyLabel(metrics[0])],
                 [
                   'Operating income',
                   formatMetric(metrics[1].value),
-                  '↗ 24.0% YoY',
+                  yoyLabel(metrics[1]),
                 ],
-                ['Net margin', `${netMargin}%`, '↗ 150 bps YoY'],
+                ['Net margin', `${netMargin}%`, netMarginDelta],
                 [
                   'Data coverage',
                   `${filings.length} filing${filings.length === 1 ? '' : 's'}`,
@@ -613,7 +640,7 @@ export default function CatalystView() {
                   <span className="text-xs text-slate-400">
                     {label}{' '}
                     <small className="ml-1 text-[10px] text-slate-600">
-                      {i < 3 ? 'FY24' : ''}
+                      {i < 3 ? metrics[i]?.period : ''}
                     </small>
                   </span>
                   <strong className="mt-4 block text-2xl tracking-tight">
@@ -1031,7 +1058,7 @@ function MetricsCard({ metrics }: { metrics: Metric[] }) {
           <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">NORMALIZED FACTS</span>
           <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Metrics</h2>
         </div>
-        <span className="text-[11px] text-slate-500">FY24 · USD reported values</span>
+        <span className="text-[11px] text-slate-500">{metrics[0]?.period ?? 'Annual'} · USD reported values</span>
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-3">
         {metrics.map((metric) => (

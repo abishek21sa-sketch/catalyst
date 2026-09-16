@@ -20,10 +20,20 @@ export async function GET(request: Request) {
     const usGaap = payload.facts?.['us-gaap'] ?? {};
     const concepts = ['Revenues', 'OperatingIncomeLoss', 'NetIncomeLoss'].filter((concept) => concept in usGaap);
     const metricConcepts = { revenue: 'Revenues', operatingIncome: 'OperatingIncomeLoss', netIncome: 'NetIncomeLoss' } as const;
+    const annualRows = (concept: string) => (usGaap[concept]?.units?.USD ?? [])
+      .filter((row) => row.form === '10-K' && row.fp === 'FY')
+      .sort((a, b) => `${b.filed ?? ''}${b.end ?? ''}`.localeCompare(`${a.filed ?? ''}${a.end ?? ''}`));
     const metrics = Object.fromEntries(Object.entries(metricConcepts).flatMap(([key, concept]) => {
-      const rows = usGaap[concept]?.units?.USD ?? [];
-      const annual = rows.filter((row) => row.form === '10-K' && row.fp === 'FY').sort((a, b) => `${b.filed ?? ''}${b.end ?? ''}`.localeCompare(`${a.filed ?? ''}${a.end ?? ''}`))[0];
+      const annual = annualRows(concept)[0];
       return annual ? [[key, annual.val]] : [];
+    }));
+    const priorMetrics = Object.fromEntries(Object.entries(metricConcepts).flatMap(([key, concept]) => {
+      const prior = annualRows(concept)[1];
+      return prior ? [[key, prior.val]] : [];
+    }));
+    const periods = Object.fromEntries(Object.entries(metricConcepts).flatMap(([key, concept]) => {
+      const annual = annualRows(concept)[0];
+      return annual ? [[key, annual.fy ? `FY ${annual.fy}` : annual.end ?? annual.filed ?? 'Annual']] : [];
     }));
     const filingRows = new Map<string, FactRow>();
     for (const concept of Object.values(metricConcepts)) {
@@ -43,7 +53,7 @@ export async function GET(request: Request) {
         sourceUrl: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replaceAll('-', '')}/${accession}-index.html`,
         status: 'verified' as const,
       }));
-    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
+    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, priorMetrics, periods, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
   } catch {
     const fallback = loadSecFixture();
     return Response.json({ mode: 'fixture-fallback', entityName: fallback.company.name, cik: fallback.company.cik, concepts: fallback.metrics.map((metric) => metric.concept), filings: fallback.filings, sourceUrl: fallback.filings[0].sourceUrl, fetchedAt: fallback.provenance.capturedAt }, { headers: { 'Cache-Control': 'no-store' } });
