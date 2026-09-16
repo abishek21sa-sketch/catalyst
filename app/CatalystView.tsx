@@ -117,6 +117,7 @@ export default function CatalystView() {
     'fixture' | 'loading' | 'live' | 'fallback'
   >('fixture');
   const [metrics, setMetrics] = useState(snapshot.metrics);
+  const [filings, setFilings] = useState(snapshot.filings);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
   const [draftKind, setDraftKind] = useState<'hypothesis' | 'study' | null>(
@@ -135,9 +136,14 @@ export default function CatalystView() {
       const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
       const savedStudies = window.localStorage.getItem('catalyst:studies');
       const savedMetrics = window.localStorage.getItem('catalyst:metrics');
+      const savedFilings = window.localStorage.getItem('catalyst:filings');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
+      }
+      if (savedFilings) {
+        const parsedFilings = JSON.parse(savedFilings);
+        if (Array.isArray(parsedFilings)) setTimeout(() => setFilings(parsedFilings), 0);
       }
       if (savedHypotheses) {
         const parsedHypotheses = JSON.parse(savedHypotheses);
@@ -250,6 +256,7 @@ export default function CatalystView() {
           operatingIncome?: number;
           netIncome?: number;
         };
+        filings?: Filing[];
       };
       if (payload.mode === 'live' && payload.metrics) {
         setMetrics(
@@ -265,13 +272,18 @@ export default function CatalystView() {
               ] ?? metric.value,
           })),
         );
+        const nextFilings = payload.filings?.length ? payload.filings : snapshot.filings;
+        setFilings(nextFilings);
+        window.localStorage.setItem('catalyst:filings', JSON.stringify(nextFilings));
         setSourceState('live');
       } else {
         setMetrics(snapshot.metrics);
+        setFilings(snapshot.filings);
         setSourceState('fallback');
       }
     } catch {
       setMetrics(snapshot.metrics);
+      setFilings(snapshot.filings);
       setSourceState('fallback');
     }
   }
@@ -336,7 +348,7 @@ export default function CatalystView() {
     const payload = {
       exportedAt: new Date().toISOString(),
       company: snapshot.company,
-      filings: snapshot.filings,
+      filings,
       metrics,
       events: snapshot.events,
       hypotheses,
@@ -376,7 +388,7 @@ export default function CatalystView() {
       '## Provenance',
       `- Adapter: ${snapshot.provenance.adapter}`,
       `- Captured: ${snapshot.provenance.capturedAt}`,
-      `- Filing: ${snapshot.filings[0]?.sourceUrl ?? 'Unavailable'}`,
+      `- Filing: ${filings[0]?.sourceUrl ?? 'Unavailable'}`,
     ].join('\n');
     const downloadUrl = URL.createObjectURL(new Blob([brief], { type: 'text/markdown' }));
     const link = document.createElement('a');
@@ -394,6 +406,7 @@ export default function CatalystView() {
       const payload = JSON.parse(await file.text()) as {
         company?: { cik?: string };
         metrics?: typeof snapshot.metrics;
+        filings?: typeof snapshot.filings;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
       };
@@ -401,6 +414,10 @@ export default function CatalystView() {
         throw new Error('Unsupported workspace file');
       }
       setMetrics(payload.metrics);
+      if (Array.isArray(payload.filings) && payload.filings.length) {
+        setFilings(payload.filings);
+        window.localStorage.setItem('catalyst:filings', JSON.stringify(payload.filings));
+      }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
@@ -583,7 +600,7 @@ export default function CatalystView() {
                 ['Net margin', `${netMargin}%`, '↗ 150 bps YoY'],
                 [
                   'Data coverage',
-                  '1 filing',
+                  `${filings.length} filing${filings.length === 1 ? '' : 's'}`,
                   sourceState === 'live'
                     ? 'Live · SEC source'
                     : 'Fixture · verified source',
@@ -805,7 +822,7 @@ export default function CatalystView() {
               </aside>
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
-              <FilingCard filings={snapshot.filings} />
+              <FilingCard filings={filings} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <MetricsCard metrics={metrics} />
