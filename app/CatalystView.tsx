@@ -852,7 +852,7 @@ export default function CatalystView() {
               <FilingCard filings={filings} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
-              <MetricsCard metrics={metrics} />
+              <MetricsCard metrics={metrics} previousMetrics={previousMetrics} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
@@ -1050,7 +1050,7 @@ function FilingCard({ filings }: { filings: Filing[] }) {
   );
 }
 
-function MetricsCard({ metrics }: { metrics: Metric[] }) {
+function MetricsCard({ metrics, previousMetrics }: { metrics: Metric[]; previousMetrics: Record<string, number> }) {
   return (
     <section id="metrics-panel" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5 xl:col-span-2">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -1061,7 +1061,11 @@ function MetricsCard({ metrics }: { metrics: Metric[] }) {
         <span className="text-[11px] text-slate-500">{metrics[0]?.period ?? 'Annual'} · USD reported values</span>
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-3">
-        {metrics.map((metric) => (
+        {metrics.map((metric) => {
+          const key = metric.id === 'revenue' ? 'revenue' : metric.id === 'operating-income' ? 'operatingIncome' : 'netIncome';
+          const priorValue = previousMetrics[key];
+          const scale = priorValue ? Math.max(metric.value, priorValue) : metric.value;
+          return (
           <article key={metric.id} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3.5">
             <div className="flex items-start justify-between gap-3">
               <span className="text-xs text-slate-400">{metric.label}</span>
@@ -1070,12 +1074,21 @@ function MetricsCard({ metrics }: { metrics: Metric[] }) {
               )}
             </div>
             <strong className="mt-4 block text-2xl tracking-tight">{formatMetric(metric.value)}</strong>
+            {priorValue && (
+              <div className="mt-3 grid gap-1.5 text-[10px] text-slate-500" aria-label={`${metric.label} current versus prior year`}>
+                <div className="flex items-center justify-between"><span>Current</span><span className="text-slate-300">{formatMetric(metric.value)}</span></div>
+                <div className="h-1 overflow-hidden rounded-full bg-slate-800"><span className="block h-full rounded-full bg-emerald-300" style={{ width: `${(metric.value / scale) * 100}%` }} /></div>
+                <div className="flex items-center justify-between"><span>Prior year</span><span>{formatMetric(priorValue)}</span></div>
+                <div className="h-1 overflow-hidden rounded-full bg-slate-800"><span className="block h-full rounded-full bg-slate-500" style={{ width: `${(priorValue / scale) * 100}%` }} /></div>
+              </div>
+            )}
             <div className="mt-3 flex items-center justify-between border-t border-slate-800 pt-2 text-[10px] text-slate-500">
               <span>{metric.period}</span>
               <span className="font-mono">{metric.concept}</span>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
