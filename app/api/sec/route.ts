@@ -18,11 +18,16 @@ export async function GET(request: Request) {
     type FactRow = { val: number; end?: string; filed?: string; form?: string; fp?: string; fy?: number; accn?: string };
     const payload = (await response.json()) as { entityName?: string; facts?: Record<string, Record<string, { units?: Record<string, FactRow[]> }>> };
     const usGaap = payload.facts?.['us-gaap'] ?? {};
-    const concepts = ['Revenues', 'OperatingIncomeLoss', 'NetIncomeLoss'].filter((concept) => concept in usGaap);
-    const metricConcepts = { revenue: 'Revenues', operatingIncome: 'OperatingIncomeLoss', netIncome: 'NetIncomeLoss' } as const;
     const annualRows = (concept: string) => (usGaap[concept]?.units?.USD ?? [])
       .filter((row) => row.form === '10-K' && row.fp === 'FY')
       .sort((a, b) => `${b.filed ?? ''}${b.end ?? ''}`.localeCompare(`${a.filed ?? ''}${a.end ?? ''}`));
+    const metricCandidates = {
+      revenue: ['RevenueFromContractWithCustomerExcludingAssessedTax', 'Revenues'],
+      operatingIncome: ['OperatingIncomeLoss'],
+      netIncome: ['NetIncomeLoss'],
+    } as const;
+    const metricConcepts = Object.fromEntries(Object.entries(metricCandidates).map(([key, candidates]) => [key, candidates.find((concept) => annualRows(concept).length > 0) ?? candidates[0]])) as Record<keyof typeof metricCandidates, string>;
+    const concepts = Object.values(metricConcepts).filter((concept) => concept in usGaap);
     const metrics = Object.fromEntries(Object.entries(metricConcepts).flatMap(([key, concept]) => {
       const annual = annualRows(concept)[0];
       return annual ? [[key, annual.val]] : [];
