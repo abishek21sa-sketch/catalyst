@@ -225,11 +225,30 @@ export default function CatalystView() {
       ? results.filter((result) => `${result.title} ${result.meta}`.toLowerCase().includes(query)).slice(0, 8)
       : results.slice(0, 8);
   }, [hypotheses, searchQuery, studies]);
+  function eventsForFilters(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter) {
+    return snapshot.events.filter((event) =>
+      (nextEventFilter === 'all' || event.kind === nextEventFilter) &&
+      (nextSignalFilter === 'all' || event.signal === nextSignalFilter),
+    );
+  }
+  function keepSelectionInView(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter) {
+    const nextEvents = eventsForFilters(nextEventFilter, nextSignalFilter);
+    if (nextEvents.length && !nextEvents.some((event) => event.id === selectedId)) setSelectedId(nextEvents[0].id);
+  }
   function changeEventFilter(nextFilter: EventFilter) {
     setEventFilter(nextFilter);
     setActiveNav(nextFilter === 'all' ? 'Event stream' : nextFilter === 'filing' ? 'Filings' : nextFilter === 'metric' ? 'Metrics' : 'Hypotheses');
-    const nextEvents = nextFilter === 'all' ? snapshot.events : snapshot.events.filter((event) => event.kind === nextFilter);
-    if (!nextEvents.some((event) => event.id === selectedId) && nextEvents[0]) setSelectedId(nextEvents[0].id);
+    keepSelectionInView(nextFilter, signalFilter);
+  }
+  function changeSignalFilter(nextFilter: SignalFilter) {
+    setSignalFilter(nextFilter);
+    keepSelectionInView(eventFilter, nextFilter);
+  }
+  function resetEventFilters() {
+    setEventFilter('all');
+    setSignalFilter('all');
+    setActiveNav('Event stream');
+    setSelectedId(snapshot.events[0].id);
   }
   function navigateTo(label: NavLabel) {
     setActiveNav(label);
@@ -728,7 +747,7 @@ export default function CatalystView() {
                       <span className="sr-only">Filter event signal</span>
                       <select
                         value={signalFilter}
-                        onChange={(event) => setSignalFilter(event.target.value as SignalFilter)}
+                        onChange={(event) => changeSignalFilter(event.target.value as SignalFilter)}
                         className="bg-transparent text-[11px] text-slate-400 outline-none"
                       >
                         <option value="all">All signals</option>
@@ -755,16 +774,37 @@ export default function CatalystView() {
                   <span className="text-slate-600">
                     {String(visibleEvents.length).padStart(2, '0')} events
                   </span>
+                  {(eventFilter !== 'all' || signalFilter !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={resetEventFilters}
+                      className="text-emerald-300 hover:text-emerald-200"
+                    >
+                      Clear filters
+                    </button>
+                  )}
                 </div>
                 <div className="relative mt-1 pl-0 before:absolute before:bottom-5 before:left-[5px] before:top-5 before:border-l before:border-dashed before:border-slate-700">
-                  {visibleEvents.map((event) => (
+                  {visibleEvents.length ? visibleEvents.map((event) => (
                     <EventRow
                       key={event.id}
                       event={event}
                       selected={selected.id === event.id}
                       onSelect={() => setSelectedId(event.id)}
                     />
-                  ))}
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center">
+                      <strong className="block text-sm font-semibold text-slate-300">No matching events</strong>
+                      <span className="mt-1 block text-xs text-slate-500">Try a broader event or signal filter.</span>
+                      <button
+                        type="button"
+                        onClick={resetEventFilters}
+                        className="mt-3 rounded border border-emerald-900 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10"
+                      >
+                        Reset filters
+                      </button>
+                    </div>
+                  )}
                 </div>
               </section>
               <aside
