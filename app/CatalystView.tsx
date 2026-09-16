@@ -64,6 +64,7 @@ const kindLabel: Record<Event['kind'], string> = {
   metric: 'Metric signal',
   hypothesis: 'Hypothesis',
 };
+const eventById = new Map(snapshot.events.map((event) => [event.id, event] as const));
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
@@ -323,19 +324,22 @@ export default function CatalystView() {
     const targetId = label === 'Hypotheses' ? 'hypotheses-panel' : label === 'Filings' ? 'filings-panel' : label === 'Metrics' ? 'metrics-panel' : 'event-stream';
     document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+  function focusEvent(eventId: string) {
+    setSelectedId(eventId);
+    setEventFilter('all');
+    setSignalFilter('all');
+    setNoteMessage('');
+    setEvidenceLinkMessage('');
+    setHypothesisLinkId('');
+    setStudyLinkId('');
+    setActiveNav('Event stream');
+    document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function selectSearchResult(result: SearchResult) {
     setSearchOpen(false);
     setSearchQuery('');
     if (result.kind === 'event') {
-      setSelectedId(result.id);
-      setEventFilter('all');
-      setSignalFilter('all');
-      setNoteMessage('');
-      setEvidenceLinkMessage('');
-      setHypothesisLinkId('');
-      setStudyLinkId('');
-      setActiveNav('Event stream');
-      document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      focusEvent(result.id);
       return;
     }
     setActiveNav('Hypotheses');
@@ -1269,6 +1273,24 @@ export default function CatalystView() {
                       <small className="text-[10px] text-slate-600">
                         {h.evidenceIds?.length ?? 0} linked event{(h.evidenceIds?.length ?? 0) === 1 ? '' : 's'}
                       </small>
+                      {h.evidenceIds?.length ? (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-600">Jump to</span>
+                          {h.evidenceIds.map((eventId) => {
+                            const event = eventById.get(eventId);
+                            return event ? (
+                              <button
+                                key={eventId}
+                                type="button"
+                                onClick={() => focusEvent(eventId)}
+                                className="max-w-full truncate rounded border border-slate-700 px-1.5 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                              >
+                                {event.title}
+                              </button>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : null}
                     </span>
                   <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
                     {h.status}
@@ -1311,6 +1333,24 @@ export default function CatalystView() {
                       <small className="text-[10px] text-slate-600">
                         {s.evidenceIds?.length ?? 0} linked event{(s.evidenceIds?.length ?? 0) === 1 ? '' : 's'}
                       </small>
+                      {s.evidenceIds?.length ? (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                          <span className="text-[10px] text-slate-600">Jump to</span>
+                          {s.evidenceIds.map((eventId) => {
+                            const event = eventById.get(eventId);
+                            return event ? (
+                              <button
+                                key={eventId}
+                                type="button"
+                                onClick={() => focusEvent(eventId)}
+                                className="max-w-full truncate rounded border border-slate-700 px-1.5 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                              >
+                                {event.title}
+                              </button>
+                            ) : null;
+                          })}
+                        </div>
+                      ) : null}
                     </span>
                   <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
                     {s.state}
