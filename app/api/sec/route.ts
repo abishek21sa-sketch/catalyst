@@ -40,6 +40,23 @@ export async function GET(request: Request) {
       const annual = annualRows(concept)[0];
       return annual ? [[key, annual.fy ? `FY ${annual.fy}` : annual.end ?? annual.filed ?? 'Annual']] : [];
     }));
+    const currentPeriodEnds = Object.values(metricConcepts).map((concept) => annualRows(concept)[0]?.end).filter((value): value is string => Boolean(value));
+    const priorPeriodEnds = Object.values(metricConcepts).map((concept) => annualRows(concept)[1]?.end).filter((value): value is string => Boolean(value));
+    const duplicateFacts = Object.values(metricConcepts).reduce((total, concept) => {
+      const keys = annualRows(concept).map((row) => `${row.accn ?? ''}|${row.end ?? ''}|${row.filed ?? ''}|${row.val}`);
+      return total + keys.length - new Set(keys).size;
+    }, 0);
+    const amendedFilings = Object.values(metricConcepts).reduce((total, concept) => total + (usGaap[concept]?.units?.USD ?? []).filter((row) => row.form === '10-K/A' && row.fp === 'FY').length, 0);
+    const quality = {
+      status: currentPeriodEnds.length === Object.keys(metricConcepts).length && new Set(currentPeriodEnds).size === 1 && duplicateFacts === 0 ? 'pass' as const : 'review' as const,
+      currentPeriod: currentPeriodEnds[0] ?? null,
+      priorPeriod: priorPeriodEnds[0] ?? null,
+      alignedCurrentPeriod: currentPeriodEnds.length === Object.keys(metricConcepts).length && new Set(currentPeriodEnds).size === 1,
+      alignedPriorPeriod: priorPeriodEnds.length === Object.keys(metricConcepts).length && new Set(priorPeriodEnds).size === 1,
+      duplicateFacts,
+      amendedFilings,
+      missingMetrics: Object.keys(metricConcepts).length - Object.keys(metrics).length,
+    };
     const filingRows = new Map<string, FactRow>();
     for (const concept of Object.values(metricConcepts)) {
       for (const row of usGaap[concept]?.units?.USD ?? []) {
@@ -58,9 +75,9 @@ export async function GET(request: Request) {
         sourceUrl: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replaceAll('-', '')}/${accession}-index.html`,
         status: 'verified' as const,
       }));
-    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, priorMetrics, periods, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
+    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, priorMetrics, periods, quality, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
   } catch {
     const fallback = loadSecFixture();
-    return Response.json({ mode: 'fixture-fallback', entityName: fallback.company.name, cik: fallback.company.cik, concepts: fallback.metrics.map((metric) => metric.concept), filings: fallback.filings, sourceUrl: fallback.filings[0].sourceUrl, fetchedAt: fallback.provenance.capturedAt }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ mode: 'fixture-fallback', entityName: fallback.company.name, cik: fallback.company.cik, concepts: fallback.metrics.map((metric) => metric.concept), quality: { status: 'fixture' as const, currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 }, filings: fallback.filings, sourceUrl: fallback.filings[0].sourceUrl, fetchedAt: fallback.provenance.capturedAt }, { headers: { 'Cache-Control': 'no-store' } });
   }
 }

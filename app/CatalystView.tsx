@@ -67,6 +67,8 @@ const kindLabel: Record<Event['kind'], string> = {
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
+type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
+const fixtureSourceQuality: SourceQuality = { status: 'fixture', currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 };
 type NavLabel = (typeof nav)[number][0];
 type SearchResult = {
   id: string;
@@ -129,6 +131,7 @@ export default function CatalystView() {
     'fixture' | 'loading' | 'live' | 'fallback'
   >('fixture');
   const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
+  const [sourceQuality, setSourceQuality] = useState<SourceQuality>(fixtureSourceQuality);
   const [metrics, setMetrics] = useState(snapshot.metrics);
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [filings, setFilings] = useState(snapshot.filings);
@@ -162,6 +165,7 @@ export default function CatalystView() {
       const savedEventNotes = window.localStorage.getItem('catalyst:event-notes');
       const savedSourceState = window.localStorage.getItem('catalyst:source-state');
       const savedSourceUpdatedAt = window.localStorage.getItem('catalyst:source-updated-at');
+      const savedSourceQuality = window.localStorage.getItem('catalyst:source-quality');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
@@ -185,6 +189,12 @@ export default function CatalystView() {
         setTimeout(() => setSourceState(savedSourceState), 0);
       }
       if (savedSourceUpdatedAt) setTimeout(() => setSourceUpdatedAt(savedSourceUpdatedAt), 0);
+      if (savedSourceQuality) {
+        const parsedSourceQuality = JSON.parse(savedSourceQuality);
+        if (parsedSourceQuality && typeof parsedSourceQuality === 'object' && !Array.isArray(parsedSourceQuality)) {
+          setTimeout(() => setSourceQuality(parsedSourceQuality as SourceQuality), 0);
+        }
+      }
       if (savedHypotheses) {
         const parsedHypotheses = JSON.parse(savedHypotheses);
         setTimeout(() => setHypotheses(parsedHypotheses), 0);
@@ -339,6 +349,8 @@ export default function CatalystView() {
   const activeStudies = studies.filter((study) => study.state === 'active').length;
   const evidenceBackedEvents = snapshot.events.filter((event) => event.evidence.length > 0).length;
   const sourceDescription = sourceState === 'live' ? 'Live SEC source' : sourceState === 'fallback' ? 'Fixture fallback' : 'Verified fixture';
+  const sourceQualityLabel = sourceQuality.status === 'pass' ? 'Aligned' : sourceQuality.status === 'review' ? 'Review needed' : 'Fixture verified';
+  const sourceQualityDetail = sourceQuality.missingMetrics ? `${sourceQuality.missingMetrics} metric${sourceQuality.missingMetrics === 1 ? '' : 's'} missing` : `${sourceQuality.duplicateFacts} duplicate facts · ${sourceQuality.amendedFilings} amendments`;
   async function refreshSource() {
     setSourceState('loading');
     try {
@@ -353,6 +365,7 @@ export default function CatalystView() {
         };
         priorMetrics?: Record<string, number>;
         periods?: Record<string, string>;
+        quality?: SourceQuality;
         filings?: Filing[];
       };
       const checkedAt = payload.fetchedAt ?? new Date().toISOString();
@@ -380,6 +393,9 @@ export default function CatalystView() {
         window.localStorage.setItem('catalyst:filings', JSON.stringify(nextFilings));
         setSourceState('live');
         window.localStorage.setItem('catalyst:source-state', 'live');
+        const nextSourceQuality = payload.quality ?? fixtureSourceQuality;
+        setSourceQuality(nextSourceQuality);
+        window.localStorage.setItem('catalyst:source-quality', JSON.stringify(nextSourceQuality));
       } else {
         setMetrics(snapshot.metrics);
         window.localStorage.setItem('catalyst:metrics', JSON.stringify(snapshot.metrics));
@@ -388,6 +404,8 @@ export default function CatalystView() {
         setFilings(snapshot.filings);
         setSourceState('fallback');
         window.localStorage.setItem('catalyst:source-state', 'fallback');
+        setSourceQuality(fixtureSourceQuality);
+        window.localStorage.setItem('catalyst:source-quality', JSON.stringify(fixtureSourceQuality));
       }
     } catch {
       const checkedAt = new Date().toISOString();
@@ -400,6 +418,8 @@ export default function CatalystView() {
       setFilings(snapshot.filings);
       setSourceState('fallback');
       window.localStorage.setItem('catalyst:source-state', 'fallback');
+      setSourceQuality(fixtureSourceQuality);
+      window.localStorage.setItem('catalyst:source-quality', JSON.stringify(fixtureSourceQuality));
     }
   }
   async function copyCitation() {
@@ -540,6 +560,7 @@ export default function CatalystView() {
       eventNotes,
       sourceState,
       sourceUpdatedAt,
+      sourceQuality,
       hypotheses,
       studies,
       provenance: snapshot.provenance,
@@ -604,6 +625,7 @@ export default function CatalystView() {
         eventNotes?: Record<string, string>;
         sourceState?: 'fixture' | 'live' | 'fallback';
         sourceUpdatedAt?: string | null;
+        sourceQuality?: SourceQuality;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
       };
@@ -630,6 +652,10 @@ export default function CatalystView() {
       if (typeof payload.sourceUpdatedAt === 'string') {
         setSourceUpdatedAt(payload.sourceUpdatedAt);
         window.localStorage.setItem('catalyst:source-updated-at', payload.sourceUpdatedAt);
+      }
+      if (payload.sourceQuality && typeof payload.sourceQuality === 'object') {
+        setSourceQuality(payload.sourceQuality);
+        window.localStorage.setItem('catalyst:source-quality', JSON.stringify(payload.sourceQuality));
       }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
@@ -873,6 +899,13 @@ export default function CatalystView() {
                 ))}
               </div>
             </section>
+            <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-[10px] ${sourceQuality.status === 'review' ? 'border-amber-900/70 bg-amber-950/15 text-amber-200' : 'border-emerald-900/60 bg-emerald-950/10 text-emerald-200'}`}>
+              <span className="font-bold uppercase tracking-[.12em] text-slate-500">Data quality</span>
+              <strong>{sourceQualityLabel}</strong>
+              <span className="text-slate-500">Current period {sourceQuality.currentPeriod ?? 'Unavailable'}</span>
+              {sourceQuality.priorPeriod && <span className="text-slate-500">Prior period {sourceQuality.priorPeriod}</span>}
+              <span className="text-slate-500">{sourceQualityDetail}</span>
+            </div>
             <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <section id="event-stream" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
                 <div className="flex items-start justify-between">
