@@ -16,6 +16,7 @@ import {
   FlaskConical,
   Layers3,
   Menu,
+  Pencil,
   RefreshCw,
   Search,
   Sparkles,
@@ -65,6 +66,7 @@ const kindLabel: Record<Event['kind'], string> = {
 };
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
+type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
 type NavLabel = (typeof nav)[number][0];
 type SearchResult = {
   id: string;
@@ -141,6 +143,7 @@ export default function CatalystView() {
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [draftEditTarget, setDraftEditTarget] = useState<DraftTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [citationMessage, setCitationMessage] = useState('');
@@ -374,8 +377,20 @@ export default function CatalystView() {
     window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextNotes));
     setNoteMessage(note ? 'Note saved locally' : 'Note cleared');
   }
-  function saveDraft(title: string, description: string) {
-    if (draftKind === 'hypothesis') {
+  function saveDraft(title: string, description: string, editTarget: DraftTarget | null) {
+    if (editTarget?.kind === 'hypothesis') {
+      setHypotheses((items) => {
+        const next = items.map((item) => item.id === editTarget.id ? { ...item, title, description: description || 'Draft hypothesis queued for evidence.' } : item);
+        window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
+        return next;
+      });
+    } else if (editTarget?.kind === 'study') {
+      setStudies((items) => {
+        const next = items.map((item) => item.id === editTarget.id ? { ...item, title, updatedAt: 'Just now' } : item);
+        window.localStorage.setItem('catalyst:studies', JSON.stringify(next));
+        return next;
+      });
+    } else if (draftKind === 'hypothesis') {
       setHypotheses((items) => {
         const next = [...items, { id: `h-local-${Date.now()}`, title, status: 'testing' as const, description: description || 'Draft hypothesis queued for evidence.' }];
         window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(next));
@@ -388,7 +403,12 @@ export default function CatalystView() {
         return next;
       });
     }
+    setDraftEditTarget(null);
     setDraftKind(null);
+  }
+  function openDraft(kind: 'hypothesis' | 'study', editTarget: DraftTarget | null = null) {
+    setDraftEditTarget(editTarget);
+    setDraftKind(kind);
   }
   function confirmDelete() {
     if (!deleteTarget) return;
@@ -668,14 +688,14 @@ export default function CatalystView() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setDraftKind('hypothesis')}
+                  onClick={() => openDraft('hypothesis')}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-800 bg-[#101a21] px-3 py-2.5 text-xs font-semibold text-slate-300"
                 >
                   <Target size={15} /> Add hypothesis
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDraftKind('study')}
+                  onClick={() => openDraft('study')}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-300 px-3 py-2.5 text-xs font-semibold text-slate-950"
                 >
                   <FlaskConical size={15} /> New study
@@ -1016,6 +1036,14 @@ export default function CatalystView() {
                   <em className="rounded bg-emerald-950 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-emerald-200">
                     {h.status}
                   </em>
+                  <button
+                    type="button"
+                    aria-label={`Edit ${h.title}`}
+                    onClick={() => openDraft('hypothesis', { kind: 'hypothesis', id: h.id, title: h.title, description: h.description })}
+                    className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300"
+                  >
+                    <Pencil size={13} />
+                  </button>
                   <button type="button" onClick={() => advanceHypothesis(h.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
                     {h.status === 'testing' ? 'Support' : h.status === 'supported' ? 'Park' : 'Reopen'}
                   </button>
@@ -1047,6 +1075,14 @@ export default function CatalystView() {
                   <em className="rounded bg-slate-800 px-1.5 py-1 text-[9px] font-bold uppercase not-italic text-slate-400">
                     {s.state}
                   </em>
+                  <button
+                    type="button"
+                    aria-label={`Edit ${s.title}`}
+                    onClick={() => openDraft('study', { kind: 'study', id: s.id, title: s.title, description: '' })}
+                    className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300"
+                  >
+                    <Pencil size={13} />
+                  </button>
                   <button type="button" onClick={() => toggleStudyState(s.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
                     {s.state === 'active' ? 'Queue' : 'Start'}
                   </button>
@@ -1114,8 +1150,14 @@ export default function CatalystView() {
       </main>
       <DraftDialog
         kind={draftKind}
+        editTarget={draftEditTarget}
         open={draftKind !== null}
-        onOpenChange={(open) => !open && setDraftKind(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDraftKind(null);
+            setDraftEditTarget(null);
+          }
+        }}
         onSave={saveDraft}
       />
       <SearchDialog
@@ -1296,22 +1338,32 @@ function SearchDialog({
 
 function DraftDialog({
   kind,
+  editTarget,
   open,
   onOpenChange,
   onSave,
 }: {
   kind: 'hypothesis' | 'study' | null;
+  editTarget: DraftTarget | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (title: string, description: string) => void;
+  onSave: (title: string, description: string, editTarget: DraftTarget | null) => void;
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const isHypothesis = kind === 'hypothesis';
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => {
+      setTitle(editTarget?.title ?? '');
+      setDescription(editTarget?.description ?? '');
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [editTarget, open]);
   function submit(event: { preventDefault: () => void }) {
     event.preventDefault();
     if (!title.trim()) return;
-    onSave(title.trim(), description.trim());
+    onSave(title.trim(), description.trim(), editTarget);
     setTitle('');
     setDescription('');
   }
@@ -1320,10 +1372,12 @@ function DraftDialog({
       <DialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-slate-100">
-            {isHypothesis ? 'Add working hypothesis' : 'Start a research study'}
+            {editTarget ? (isHypothesis ? 'Edit working hypothesis' : 'Edit research study') : isHypothesis ? 'Add working hypothesis' : 'Start a research study'}
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            {isHypothesis
+            {editTarget
+              ? 'Refine the research record while keeping its current status.'
+              : isHypothesis
               ? 'Capture the question you want the next filing to answer.'
               : 'Create a local study draft and move it into the research queue.'}
           </DialogDescription>
@@ -1366,7 +1420,7 @@ function DraftDialog({
               type="submit"
               className="rounded-lg bg-emerald-300 px-3 py-2 text-xs font-semibold text-slate-950"
             >
-              Save draft
+              {editTarget ? 'Save changes' : 'Save draft'}
             </button>
           </DialogFooter>
         </form>
