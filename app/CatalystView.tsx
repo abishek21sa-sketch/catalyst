@@ -72,6 +72,10 @@ type SearchResult = {
   meta: string;
 };
 
+function formatSourceTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+}
+
 function EventRow({
   event,
   selected,
@@ -121,6 +125,7 @@ export default function CatalystView() {
   const [sourceState, setSourceState] = useState<
     'fixture' | 'loading' | 'live' | 'fallback'
   >('fixture');
+  const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
   const [metrics, setMetrics] = useState(snapshot.metrics);
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [filings, setFilings] = useState(snapshot.filings);
@@ -265,6 +270,7 @@ export default function CatalystView() {
       const response = await fetch(`/api/sec?cik=${snapshot.company.cik}`);
       const payload = (await response.json()) as {
         mode?: string;
+        fetchedAt?: string;
         metrics?: {
           revenue?: number;
           operatingIncome?: number;
@@ -274,6 +280,7 @@ export default function CatalystView() {
         periods?: Record<string, string>;
         filings?: Filing[];
       };
+      setSourceUpdatedAt(payload.fetchedAt ?? new Date().toISOString());
       if (payload.mode === 'live' && payload.metrics) {
         const nextMetrics = snapshot.metrics.map((metric) => {
           const key = metric.id === 'revenue' ? 'revenue' : metric.id === 'operating-income' ? 'operatingIncome' : 'netIncome';
@@ -302,6 +309,7 @@ export default function CatalystView() {
         setSourceState('fallback');
       }
     } catch {
+      setSourceUpdatedAt(new Date().toISOString());
       setMetrics(snapshot.metrics);
       setPreviousMetrics(fixturePriorMetrics);
       window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
@@ -586,7 +594,7 @@ export default function CatalystView() {
                 <div className="flex items-center gap-2 text-[11px] text-slate-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_#7de4bb]" />{' '}
                   Company overview <span className="text-slate-700">·</span>{' '}
-                  Updated 2 min ago
+                  {sourceUpdatedAt ? `Source checked ${formatSourceTime(sourceUpdatedAt)}` : 'Fixture snapshot'}
                 </div>
                 <h1 className="mt-3 text-3xl font-semibold tracking-[-.055em] sm:text-[39px]">
                   Microsoft{' '}
@@ -925,7 +933,7 @@ export default function CatalystView() {
             <footer className="flex flex-col justify-between gap-2 py-5 text-[10px] text-slate-600 sm:flex-row">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex items-center gap-1">
-                  <Database size={13} /> Source: SEC EDGAR fixture · CIK{' '}
+                  <Database size={13} /> Source: {sourceDescription} · CIK{' '}
                   {snapshot.company.cik}
                 </span>
                 <button
