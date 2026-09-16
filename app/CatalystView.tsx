@@ -138,11 +138,13 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
+  const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [citationMessage, setCitationMessage] = useState('');
+  const [noteMessage, setNoteMessage] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     try {
@@ -151,6 +153,7 @@ export default function CatalystView() {
       const savedMetrics = window.localStorage.getItem('catalyst:metrics');
       const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
       const savedFilings = window.localStorage.getItem('catalyst:filings');
+      const savedEventNotes = window.localStorage.getItem('catalyst:event-notes');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
@@ -162,6 +165,13 @@ export default function CatalystView() {
       if (savedFilings) {
         const parsedFilings = JSON.parse(savedFilings);
         if (Array.isArray(parsedFilings)) setTimeout(() => setFilings(parsedFilings), 0);
+      }
+      if (savedEventNotes) {
+        const parsedEventNotes = JSON.parse(savedEventNotes);
+        if (parsedEventNotes && typeof parsedEventNotes === 'object' && !Array.isArray(parsedEventNotes)) {
+          const notes = Object.fromEntries(Object.entries(parsedEventNotes).filter(([, value]) => typeof value === 'string')) as Record<string, string>;
+          setTimeout(() => setEventNotes(notes), 0);
+        }
       }
       if (savedHypotheses) {
         const parsedHypotheses = JSON.parse(savedHypotheses);
@@ -233,7 +243,10 @@ export default function CatalystView() {
   }
   function keepSelectionInView(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter) {
     const nextEvents = eventsForFilters(nextEventFilter, nextSignalFilter);
-    if (nextEvents.length && !nextEvents.some((event) => event.id === selectedId)) setSelectedId(nextEvents[0].id);
+    if (nextEvents.length && !nextEvents.some((event) => event.id === selectedId)) {
+      setSelectedId(nextEvents[0].id);
+      setNoteMessage('');
+    }
   }
   function changeEventFilter(nextFilter: EventFilter) {
     setEventFilter(nextFilter);
@@ -249,6 +262,7 @@ export default function CatalystView() {
     setSignalFilter('all');
     setActiveNav('Event stream');
     setSelectedId(snapshot.events[0].id);
+    setNoteMessage('');
   }
   function navigateTo(label: NavLabel) {
     setActiveNav(label);
@@ -272,6 +286,7 @@ export default function CatalystView() {
       setSelectedId(result.id);
       setEventFilter('all');
       setSignalFilter('all');
+      setNoteMessage('');
       setActiveNav('Event stream');
       document.getElementById('event-stream')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
@@ -350,6 +365,15 @@ export default function CatalystView() {
       setCitationMessage('Copy unavailable');
     }
   }
+  function saveEventNote() {
+    const note = eventNotes[selected.id]?.trim() ?? '';
+    const nextNotes = { ...eventNotes };
+    if (note) nextNotes[selected.id] = note;
+    else delete nextNotes[selected.id];
+    setEventNotes(nextNotes);
+    window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextNotes));
+    setNoteMessage(note ? 'Note saved locally' : 'Note cleared');
+  }
   function saveDraft(title: string, description: string) {
     if (draftKind === 'hypothesis') {
       setHypotheses((items) => {
@@ -405,6 +429,7 @@ export default function CatalystView() {
       metrics,
       previousMetrics,
       events: snapshot.events,
+      eventNotes,
       hypotheses,
       studies,
       provenance: snapshot.provenance,
@@ -418,6 +443,7 @@ export default function CatalystView() {
     setWorkspaceMessage({ text: 'Workspace exported' });
   }
   function exportBrief() {
+    const notedEvents = snapshot.events.filter((event) => eventNotes[event.id]?.trim());
     const brief = [
       `# ${snapshot.company.name} (${snapshot.company.ticker}) Research Brief`,
       `Exported ${new Date().toISOString()}`,
@@ -432,6 +458,9 @@ export default function CatalystView() {
       '',
       '## Evidence stream',
       ...snapshot.events.map((event) => `- **${event.title}** (${event.date}) — ${event.summary} _${event.sourceLabel}_`),
+      '',
+      '## Analyst notes',
+      ...(notedEvents.length ? notedEvents.map((event) => `- **${event.title}:** ${eventNotes[event.id].trim()}`) : ['- None captured']),
       '',
       '## Working hypotheses',
       ...hypotheses.map((hypothesis) => `- **${hypothesis.title}** [${hypothesis.status}] — ${hypothesis.description}`),
@@ -462,6 +491,7 @@ export default function CatalystView() {
         metrics?: typeof snapshot.metrics;
         previousMetrics?: Record<string, number>;
         filings?: typeof snapshot.filings;
+        eventNotes?: Record<string, string>;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
       };
@@ -476,6 +506,11 @@ export default function CatalystView() {
         setFilings(payload.filings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(payload.filings));
       }
+      const nextEventNotes = payload.eventNotes && typeof payload.eventNotes === 'object' && !Array.isArray(payload.eventNotes)
+        ? Object.fromEntries(Object.entries(payload.eventNotes).filter(([id, value]) => snapshot.events.some((event) => event.id === id) && typeof value === 'string')) as Record<string, string>
+        : {};
+      setEventNotes(nextEventNotes);
+      window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextEventNotes));
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
@@ -790,7 +825,10 @@ export default function CatalystView() {
                       key={event.id}
                       event={event}
                       selected={selected.id === event.id}
-                      onSelect={() => setSelectedId(event.id)}
+                      onSelect={() => {
+                        setSelectedId(event.id);
+                        setNoteMessage('');
+                      }}
                     />
                   )) : (
                     <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center">
@@ -825,7 +863,10 @@ export default function CatalystView() {
                   <button
                     type="button"
                     aria-label="Reset detail"
-                    onClick={() => setSelectedId(snapshot.events[0].id)}
+                    onClick={() => {
+                      setSelectedId(snapshot.events[0].id);
+                      setNoteMessage('');
+                    }}
                     className="h-7 w-7 text-slate-500 hover:text-slate-200"
                   >
                     <X size={16} />
@@ -894,6 +935,35 @@ export default function CatalystView() {
                       Adapter: SEC EDGAR company-facts
                     </small>
                   </span>
+                </div>
+                <div className="mt-4 border-t border-slate-800 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">Analyst note</span>
+                    <span className="text-[10px] text-slate-600">Saved on this device</span>
+                  </div>
+                  <textarea
+                    value={eventNotes[selected.id] ?? ''}
+                    onChange={(event) => {
+                      setEventNotes((notes) => ({ ...notes, [selected.id]: event.target.value }));
+                      setNoteMessage('Unsaved changes');
+                    }}
+                    placeholder="What would change your mind about this signal?"
+                    rows={3}
+                    className="mt-2 w-full resize-y rounded-lg border border-slate-800 bg-[#0b1319] px-3 py-2 text-xs leading-5 text-slate-300 outline-none placeholder:text-slate-600 focus:border-emerald-900"
+                  />
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-[10px] text-slate-600">Private to this browser</span>
+                    <div className="flex items-center gap-2">
+                      {noteMessage && <output className="text-[10px] text-emerald-300">{noteMessage}</output>}
+                      <button
+                        type="button"
+                        onClick={saveEventNote}
+                        className="rounded border border-emerald-900 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10"
+                      >
+                        Save note
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <a
