@@ -157,6 +157,8 @@ export default function CatalystView() {
       const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
       const savedFilings = window.localStorage.getItem('catalyst:filings');
       const savedEventNotes = window.localStorage.getItem('catalyst:event-notes');
+      const savedSourceState = window.localStorage.getItem('catalyst:source-state');
+      const savedSourceUpdatedAt = window.localStorage.getItem('catalyst:source-updated-at');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
@@ -176,6 +178,10 @@ export default function CatalystView() {
           setTimeout(() => setEventNotes(notes), 0);
         }
       }
+      if (savedSourceState === 'live' || savedSourceState === 'fallback') {
+        setTimeout(() => setSourceState(savedSourceState), 0);
+      }
+      if (savedSourceUpdatedAt) setTimeout(() => setSourceUpdatedAt(savedSourceUpdatedAt), 0);
       if (savedHypotheses) {
         const parsedHypotheses = JSON.parse(savedHypotheses);
         setTimeout(() => setHypotheses(parsedHypotheses), 0);
@@ -321,7 +327,9 @@ export default function CatalystView() {
         periods?: Record<string, string>;
         filings?: Filing[];
       };
-      setSourceUpdatedAt(payload.fetchedAt ?? new Date().toISOString());
+      const checkedAt = payload.fetchedAt ?? new Date().toISOString();
+      setSourceUpdatedAt(checkedAt);
+      window.localStorage.setItem('catalyst:source-updated-at', checkedAt);
       if (payload.mode === 'live' && payload.metrics) {
         const nextMetrics = snapshot.metrics.map((metric) => {
           const key = metric.id === 'revenue' ? 'revenue' : metric.id === 'operating-income' ? 'operatingIncome' : 'netIncome';
@@ -335,6 +343,7 @@ export default function CatalystView() {
           };
         });
         setMetrics(nextMetrics);
+        window.localStorage.setItem('catalyst:metrics', JSON.stringify(nextMetrics));
         const nextPreviousMetrics = payload.priorMetrics ?? fixturePriorMetrics;
         setPreviousMetrics(nextPreviousMetrics);
         window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(nextPreviousMetrics));
@@ -342,20 +351,27 @@ export default function CatalystView() {
         setFilings(nextFilings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(nextFilings));
         setSourceState('live');
+        window.localStorage.setItem('catalyst:source-state', 'live');
       } else {
         setMetrics(snapshot.metrics);
+        window.localStorage.setItem('catalyst:metrics', JSON.stringify(snapshot.metrics));
         setPreviousMetrics(fixturePriorMetrics);
         window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
         setFilings(snapshot.filings);
         setSourceState('fallback');
+        window.localStorage.setItem('catalyst:source-state', 'fallback');
       }
     } catch {
-      setSourceUpdatedAt(new Date().toISOString());
+      const checkedAt = new Date().toISOString();
+      setSourceUpdatedAt(checkedAt);
+      window.localStorage.setItem('catalyst:source-updated-at', checkedAt);
       setMetrics(snapshot.metrics);
+      window.localStorage.setItem('catalyst:metrics', JSON.stringify(snapshot.metrics));
       setPreviousMetrics(fixturePriorMetrics);
       window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
       setFilings(snapshot.filings);
       setSourceState('fallback');
+      window.localStorage.setItem('catalyst:source-state', 'fallback');
     }
   }
   async function copyCitation() {
@@ -450,6 +466,8 @@ export default function CatalystView() {
       previousMetrics,
       events: snapshot.events,
       eventNotes,
+      sourceState,
+      sourceUpdatedAt,
       hypotheses,
       studies,
       provenance: snapshot.provenance,
@@ -512,6 +530,8 @@ export default function CatalystView() {
         previousMetrics?: Record<string, number>;
         filings?: typeof snapshot.filings;
         eventNotes?: Record<string, string>;
+        sourceState?: 'fixture' | 'live' | 'fallback';
+        sourceUpdatedAt?: string | null;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
       };
@@ -531,6 +551,14 @@ export default function CatalystView() {
         : {};
       setEventNotes(nextEventNotes);
       window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextEventNotes));
+      if (payload.sourceState === 'fixture' || payload.sourceState === 'live' || payload.sourceState === 'fallback') {
+        setSourceState(payload.sourceState);
+        window.localStorage.setItem('catalyst:source-state', payload.sourceState);
+      }
+      if (typeof payload.sourceUpdatedAt === 'string') {
+        setSourceUpdatedAt(payload.sourceUpdatedAt);
+        window.localStorage.setItem('catalyst:source-updated-at', payload.sourceUpdatedAt);
+      }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
