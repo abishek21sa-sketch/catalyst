@@ -860,6 +860,35 @@ export default function CatalystView() {
     URL.revokeObjectURL(downloadUrl);
     setWorkspaceMessage({ text: `Study packet exported: ${study.title}` });
   }
+  function exportComparison() {
+    if (!comparison) return;
+    const packet = {
+      kind: 'catalyst.company-comparison',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      workspace: {
+        company: snapshot.company,
+        metrics,
+        previousMetrics,
+        metricHistory,
+        filings,
+        source: { state: sourceState, updatedAt: sourceUpdatedAt, quality: sourceQuality },
+        provenance: snapshot.provenance,
+      },
+      comparison,
+      comparisonRules: {
+        crossCompanyPeriodMatch: comparison.periods.revenue === metrics[0]?.period,
+        note: 'Compare reported values only after checking annual period alignment and source quality.',
+      },
+    };
+    const downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-vs-${comparison.cik}-comparison.json`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: 'Company comparison exported' });
+  }
   async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1551,6 +1580,7 @@ export default function CatalystView() {
                 comparison={comparison}
                 workspaceCompany={snapshot.company}
                 workspaceMetrics={metrics}
+                onExport={exportComparison}
                 onClear={() => setComparison(null)}
               />
             )}
@@ -1904,11 +1934,13 @@ function CompanyComparisonCard({
   comparison,
   workspaceCompany,
   workspaceMetrics,
+  onExport,
   onClear,
 }: {
   comparison: SecComparison;
   workspaceCompany: typeof snapshot.company;
   workspaceMetrics: Metric[];
+  onExport: () => void;
   onClear: () => void;
 }) {
   const rows: Array<{ key: 'revenue' | 'operatingIncome' | 'netIncome'; label: string; workspaceMetric?: Metric }> = [
@@ -1917,6 +1949,9 @@ function CompanyComparisonCard({
     { key: 'netIncome', label: 'Net income', workspaceMetric: workspaceMetrics[2] },
   ];
   const qualityLabel = comparison.quality.status === 'pass' ? 'Aligned' : comparison.quality.status === 'review' ? 'Review needed' : 'Fixture';
+  const workspacePeriod = workspaceMetrics[0]?.period ?? 'Current';
+  const comparisonPeriod = comparison.periods.revenue ?? 'Annual';
+  const periodsAligned = workspacePeriod === comparisonPeriod;
   return (
     <section className="mt-4 rounded-xl border border-sky-900/70 bg-[#101820]/75 p-4 sm:p-5">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -1927,6 +1962,7 @@ function CompanyComparisonCard({
         </div>
         <div className="flex items-center gap-2">
           <a href={comparison.sourceUrl} target="_blank" rel="noreferrer" className="rounded border border-slate-800 px-2.5 py-2 text-[10px] font-semibold text-slate-400 no-underline hover:border-sky-900 hover:text-sky-200">Open SEC source</a>
+          <button type="button" onClick={onExport} className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2.5 py-2 text-[10px] font-semibold text-slate-400 hover:border-sky-900 hover:text-sky-200"><Download size={12} /> Export compare</button>
           <button type="button" onClick={onClear} className="rounded border border-slate-800 px-2.5 py-2 text-[10px] font-semibold text-slate-400 hover:border-sky-900 hover:text-sky-200">Clear compare</button>
         </div>
       </div>
@@ -1960,6 +1996,7 @@ function CompanyComparisonCard({
         <strong className={qualityLabel === 'Aligned' ? 'text-emerald-300' : 'text-amber-300'}>{qualityLabel}</strong>
         <span>Current period {comparison.quality.currentPeriod ?? 'Unavailable'}</span>
         <span>{comparison.filings.length} filing{comparison.filings.length === 1 ? '' : 's'} available</span>
+        <span className={periodsAligned ? 'text-emerald-300' : 'text-amber-300'}>{periodsAligned ? 'Periods aligned' : `Period mismatch: ${workspacePeriod} vs ${comparisonPeriod}`}</span>
       </div>
     </section>
   );
