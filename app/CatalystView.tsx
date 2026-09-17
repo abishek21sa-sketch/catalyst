@@ -75,6 +75,7 @@ type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; de
 type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
 type MetricHistoryPoint = { value: number; period: string };
 type MetricHistory = Record<string, MetricHistoryPoint[]>;
+type SecComparison = { entityName: string; cik: string; metrics: Record<string, number>; priorMetrics: Record<string, number>; periods: Record<string, string>; history: MetricHistory; quality: SourceQuality; filings: Filing[]; sourceUrl: string; fetchedAt: string };
 const fixtureSourceQuality: SourceQuality = { status: 'fixture', currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 };
 const fixtureMetricHistory: MetricHistory = {
   revenue: [{ value: snapshot.metrics[0].value, period: 'FY 2024' }, { value: fixturePriorMetrics.revenue, period: 'FY 2023' }],
@@ -195,6 +196,11 @@ export default function CatalystView() {
   const [studyLinkId, setStudyLinkId] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [comparisonCik, setComparisonCik] = useState('');
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState('');
+  const [comparison, setComparison] = useState<SecComparison | null>(null);
   const [draftEditTarget, setDraftEditTarget] = useState<DraftTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -508,6 +514,52 @@ export default function CatalystView() {
       window.localStorage.setItem('catalyst:source-state', 'fallback');
       setSourceQuality(fixtureSourceQuality);
       window.localStorage.setItem('catalyst:source-quality', JSON.stringify(fixtureSourceQuality));
+    }
+  }
+  async function loadComparison() {
+    const cik = comparisonCik.trim();
+    if (!/^\d{10}$/.test(cik)) {
+      setComparisonError('Enter a 10-digit SEC CIK.');
+      return;
+    }
+    setComparisonLoading(true);
+    setComparisonError('');
+    try {
+      const response = await fetch(`/api/sec?cik=${cik}`);
+      const payload = (await response.json()) as {
+        mode?: string;
+        entityName?: string;
+        cik?: string;
+        metrics?: Record<string, number>;
+        priorMetrics?: Record<string, number>;
+        periods?: Record<string, string>;
+        history?: MetricHistory;
+        quality?: SourceQuality;
+        filings?: Filing[];
+        sourceUrl?: string;
+        fetchedAt?: string;
+      };
+      if (!response.ok || payload.mode !== 'live' || !payload.entityName || !payload.metrics?.revenue || !payload.quality) {
+        throw new Error('Comparison data unavailable');
+      }
+      setComparison({
+        entityName: payload.entityName,
+        cik: payload.cik ?? cik,
+        metrics: payload.metrics,
+        priorMetrics: payload.priorMetrics ?? {},
+        periods: payload.periods ?? {},
+        history: payload.history ?? {},
+        quality: payload.quality,
+        filings: payload.filings ?? [],
+        sourceUrl: payload.sourceUrl ?? `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
+        fetchedAt: payload.fetchedAt ?? new Date().toISOString(),
+      });
+      setComparisonOpen(false);
+      setWorkspaceMessage({ text: `SEC comparison loaded: ${payload.entityName}` });
+    } catch {
+      setComparisonError('Could not load that company from SEC company facts.');
+    } finally {
+      setComparisonLoading(false);
     }
   }
   async function copyCitation() {
@@ -1032,6 +1084,16 @@ export default function CatalystView() {
                 >
                   <FlaskConical size={15} /> New study
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComparisonError('');
+                    setComparisonOpen(true);
+                  }}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-sky-900/80 bg-sky-300/10 px-3 py-2.5 text-xs font-semibold text-sky-200 hover:bg-sky-300/15"
+                >
+                  <BarChart3 size={15} /> Compare SEC
+                </button>
               </div>
             </div>
             <div className="mt-8 grid grid-cols-2 gap-2.5 xl:grid-cols-4">
@@ -1484,6 +1546,14 @@ export default function CatalystView() {
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <MetricsCard metrics={metrics} previousMetrics={previousMetrics} metricHistory={metricHistory} />
             </div>
+            {comparison && (
+              <CompanyComparisonCard
+                comparison={comparison}
+                workspaceCompany={snapshot.company}
+                workspaceMetrics={metrics}
+                onClear={() => setComparison(null)}
+              />
+            )}
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
                 id="hypotheses-panel"
@@ -1760,6 +1830,18 @@ export default function CatalystView() {
         quality={sourceQuality}
         sourceDescription={sourceDescription}
       />
+      <CompareDialog
+        open={comparisonOpen}
+        onOpenChange={(open) => {
+          setComparisonOpen(open);
+          if (!open) setComparisonError('');
+        }}
+        cik={comparisonCik}
+        onCikChange={setComparisonCik}
+        loading={comparisonLoading}
+        error={comparisonError}
+        onSubmit={loadComparison}
+      />
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
           <AlertDialogHeader>
@@ -1813,6 +1895,71 @@ function FilingCard({ filings }: { filings: Filing[] }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </section>
+  );
+}
+
+function CompanyComparisonCard({
+  comparison,
+  workspaceCompany,
+  workspaceMetrics,
+  onClear,
+}: {
+  comparison: SecComparison;
+  workspaceCompany: typeof snapshot.company;
+  workspaceMetrics: Metric[];
+  onClear: () => void;
+}) {
+  const rows: Array<{ key: 'revenue' | 'operatingIncome' | 'netIncome'; label: string; workspaceMetric?: Metric }> = [
+    { key: 'revenue', label: 'Revenue', workspaceMetric: workspaceMetrics[0] },
+    { key: 'operatingIncome', label: 'Operating income', workspaceMetric: workspaceMetrics[1] },
+    { key: 'netIncome', label: 'Net income', workspaceMetric: workspaceMetrics[2] },
+  ];
+  const qualityLabel = comparison.quality.status === 'pass' ? 'Aligned' : comparison.quality.status === 'review' ? 'Review needed' : 'Fixture';
+  return (
+    <section className="mt-4 rounded-xl border border-sky-900/70 bg-[#101820]/75 p-4 sm:p-5">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+        <div>
+          <span className="text-[10px] font-bold tracking-[.13em] text-sky-300/70">SEC COMPARISON</span>
+          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">{workspaceCompany.name} vs {comparison.entityName}</h2>
+          <p className="mt-1 text-[11px] text-slate-500">CIK {comparison.cik} · captured {formatSourceTime(comparison.fetchedAt)} · live company facts</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={comparison.sourceUrl} target="_blank" rel="noreferrer" className="rounded border border-slate-800 px-2.5 py-2 text-[10px] font-semibold text-slate-400 no-underline hover:border-sky-900 hover:text-sky-200">Open SEC source</a>
+          <button type="button" onClick={onClear} className="rounded border border-slate-800 px-2.5 py-2 text-[10px] font-semibold text-slate-400 hover:border-sky-900 hover:text-sky-200">Clear compare</button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {rows.map((row) => {
+          const peerValue = comparison.metrics[row.key];
+          return (
+            <article key={row.key} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-400">{row.label}</span>
+                <span className="text-[10px] text-slate-600">{comparison.periods[row.key] ?? 'Annual'}</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="min-w-0 border-r border-slate-800 pr-3">
+                  <span className="block truncate text-[10px] uppercase tracking-[.08em] text-emerald-300/80">{workspaceCompany.ticker}</span>
+                  <strong className="mt-1 block text-lg tracking-tight text-slate-200">{row.workspaceMetric ? formatMetric(row.workspaceMetric.value) : '—'}</strong>
+                  <small className="mt-1 block truncate text-[10px] text-slate-600">{row.workspaceMetric?.period ?? 'Current'}</small>
+                </div>
+                <div className="min-w-0">
+                  <span className="block truncate text-[10px] uppercase tracking-[.08em] text-sky-300/80">{comparison.entityName}</span>
+                  <strong className="mt-1 block text-lg tracking-tight text-slate-200">{typeof peerValue === 'number' ? formatMetric(peerValue) : '—'}</strong>
+                  <small className="mt-1 block truncate text-[10px] text-slate-600">{comparison.periods[row.key] ?? 'Annual'}</small>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-800 pt-3 text-[10px] text-slate-500">
+        <span className="font-bold uppercase tracking-[.1em] text-slate-600">Comparison quality</span>
+        <strong className={qualityLabel === 'Aligned' ? 'text-emerald-300' : 'text-amber-300'}>{qualityLabel}</strong>
+        <span>Current period {comparison.quality.currentPeriod ?? 'Unavailable'}</span>
+        <span>{comparison.filings.length} filing{comparison.filings.length === 1 ? '' : 's'} available</span>
       </div>
     </section>
   );
@@ -1967,6 +2114,61 @@ function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Met
         </div>
       </div>
     </section>
+  );
+}
+
+function CompareDialog({
+  open,
+  onOpenChange,
+  cik,
+  onCikChange,
+  loading,
+  error,
+  onSubmit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  cik: string;
+  onCikChange: (value: string) => void;
+  loading: boolean;
+  error: string;
+  onSubmit: () => void;
+}) {
+  function submit(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    onSubmit();
+  }
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
+        <form onSubmit={submit}>
+          <DialogHeader>
+            <DialogTitle className="text-slate-100">Compare another SEC company</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Load a live annual-fact snapshot beside the current workspace. The comparison does not change this company’s evidence graph.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 grid gap-2">
+            <label htmlFor="comparison-cik" className="text-[10px] font-bold uppercase tracking-[.12em] text-slate-500">SEC CIK</label>
+            <input
+              id="comparison-cik"
+              value={cik}
+              onChange={(event) => onCikChange(event.target.value.replace(/\D/g, '').slice(0, 10))}
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="0000320193"
+              className="rounded-lg border border-slate-800 bg-[#0b1319] px-3 py-2.5 font-mono text-sm text-slate-200 outline-none placeholder:text-slate-700 focus:border-sky-900"
+            />
+            <span className="text-[10px] leading-4 text-slate-600">Use the zero-padded 10-digit identifier from SEC EDGAR, for example Apple: 0000320193.</span>
+            {error && <p role="alert" className="text-[11px] text-amber-300">{error}</p>}
+          </div>
+          <DialogFooter className="mt-5">
+            <button type="button" onClick={() => onOpenChange(false)} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800">Cancel</button>
+            <button type="submit" disabled={loading} className="rounded-lg bg-sky-300 px-3 py-2 text-xs font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">{loading ? 'Loading SEC…' : 'Load comparison'}</button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
