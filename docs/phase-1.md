@@ -1,29 +1,29 @@
 # Catalyst roadmap
 
-## Phase 1 — Foundation + thin vertical slice (current)
+## Current release — evidence-backed research workspace
 
-Phase 1 proves the core research loop: load a small SEC EDGAR fixture, normalize it into domain objects, render the company timeline, and open a detail view whose evidence links back to the filing. The checked-in fixture is intentionally deterministic and local-first.
+The shipped vertical slice now covers the core research loop end to end: start with a deterministic Microsoft SEC fixture, refresh live SEC company facts when available, inspect the event stream, annotate evidence, maintain hypotheses and studies, and export the resulting workspace or study packet.
 
-The current slice does not claim to be a complete research platform. It is a product and data contract that later ingestion and study workflows can build on.
+The current release includes:
 
-## Phase 2 — Live ingestion and persistence
+- Normalized SEC metrics, annual history, filing metadata, source provenance, and data-quality checks.
+- Event, signal, and analyst-label filters with local notes and evidence links.
+- Editable hypotheses and studies with queue/status controls.
+- Derived operating transforms, metric-history CSV, event-review CSV, Markdown brief, workspace JSON, and study-packet exports.
+- Live SEC comparison for an alternate company, with period-alignment warnings and comparison export.
+- Local persistence for research state and reproducible study-run snapshots with captured inputs and stable signatures.
 
-- Add a rate-limited SEC adapter with user-agent configuration and retries.
-- Persist raw payloads, normalized facts, filings, and provenance records.
-- Add company selection and filing history beyond the fixture.
-- Add validation for duplicate facts, amended filings, and period alignment.
+## Next — durable workspaces and company context
 
-## Phase 3 — Research workflows
+- Add a server-backed workspace API with authentication and explicit workspace ownership.
+- Add safe company/workspace switching so research state cannot leak between companies.
+- Keep local export/import as an offline recovery path.
+- Add conflict handling and a visible “last saved” state before multi-device use.
 
-- Create/edit hypotheses and studies.
-- Add event labeling, analyst notes, and evidence collections.
-- Add reproducible study runs and metric transformations.
-- Add comparison views across companies and filing periods.
+## Later — reproducible evaluation
 
-## Phase 4 — Evaluation and portfolio context
+- Add point-in-time study runs that select only facts available by an as-of date.
+- Add event-study and backtest primitives with explicit look-ahead and filing-period rules.
+- Add factor/exposure views, paper portfolios, experiment tracking, and review gates.
 
-- Add event-study and backtest primitives with explicit point-in-time data rules.
-- Add factor/exposure views, paper portfolios, and experiment tracking.
-- Add review gates before any live or broker-connected workflow.
-
-Live trading is intentionally not part of the current build.
+Broker connectivity, live trading, alerts, and production data writes remain intentionally out of scope until the research and review controls are mature.

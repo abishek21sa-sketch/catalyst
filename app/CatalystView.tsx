@@ -17,6 +17,7 @@ import {
   Layers3,
   Menu,
   Pencil,
+  Play,
   RefreshCw,
   Search,
   Sparkles,
@@ -76,6 +77,7 @@ type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: str
 type MetricHistoryPoint = { value: number; period: string };
 type MetricHistory = Record<string, MetricHistoryPoint[]>;
 type SecComparison = { entityName: string; cik: string; metrics: Record<string, number>; priorMetrics: Record<string, number>; periods: Record<string, string>; history: MetricHistory; quality: SourceQuality; filings: Filing[]; sourceUrl: string; fetchedAt: string };
+type StudyRun = { id: string; executedAt: string; asOfPeriod: string; sourceState: 'fixture' | 'live' | 'fallback'; qualityStatus: SourceQuality['status']; evidenceCount: number; filingCount: number; metricCount: number; transformCount: number; inputSignature: string };
 const fixtureSourceQuality: SourceQuality = { status: 'fixture', currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 };
 const fixtureMetricHistory: MetricHistory = {
   revenue: [{ value: snapshot.metrics[0].value, period: 'FY 2024' }, { value: fixturePriorMetrics.revenue, period: 'FY 2023' }],
@@ -124,6 +126,30 @@ function isSecComparison(value: unknown): value is SecComparison {
     Boolean(candidate.quality && typeof candidate.quality === 'object') &&
     Array.isArray(candidate.filings) &&
     typeof candidate.fetchedAt === 'string';
+}
+
+function isStudyRun(value: unknown): value is StudyRun {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<StudyRun>;
+  return typeof candidate.id === 'string' &&
+    typeof candidate.executedAt === 'string' &&
+    typeof candidate.asOfPeriod === 'string' &&
+    (candidate.sourceState === 'fixture' || candidate.sourceState === 'live' || candidate.sourceState === 'fallback') &&
+    (candidate.qualityStatus === 'pass' || candidate.qualityStatus === 'review' || candidate.qualityStatus === 'fixture') &&
+    typeof candidate.evidenceCount === 'number' &&
+    typeof candidate.filingCount === 'number' &&
+    typeof candidate.metricCount === 'number' &&
+    typeof candidate.transformCount === 'number' &&
+    typeof candidate.inputSignature === 'string';
+}
+
+function inputSignature(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 function csvCell(value: string | number) {
@@ -203,6 +229,7 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
+  const [studyRuns, setStudyRuns] = useState<Record<string, StudyRun>>({});
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [hypothesisLinkId, setHypothesisLinkId] = useState('');
   const [studyLinkId, setStudyLinkId] = useState('');
@@ -225,6 +252,7 @@ export default function CatalystView() {
     try {
       const savedHypotheses = window.localStorage.getItem('catalyst:hypotheses');
       const savedStudies = window.localStorage.getItem('catalyst:studies');
+      const savedStudyRuns = window.localStorage.getItem('catalyst:study-runs');
       const savedMetrics = window.localStorage.getItem('catalyst:metrics');
       const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
       const savedMetricHistory = window.localStorage.getItem('catalyst:metric-history');
@@ -282,6 +310,13 @@ export default function CatalystView() {
       if (savedStudies) {
         const parsedStudies = JSON.parse(savedStudies);
         setTimeout(() => setStudies(parsedStudies), 0);
+      }
+      if (savedStudyRuns) {
+        const parsedStudyRuns = JSON.parse(savedStudyRuns);
+        if (parsedStudyRuns && typeof parsedStudyRuns === 'object' && !Array.isArray(parsedStudyRuns)) {
+          const runs = Object.fromEntries(Object.entries(parsedStudyRuns).filter(([, value]) => isStudyRun(value))) as Record<string, StudyRun>;
+          setTimeout(() => setStudyRuns(runs), 0);
+        }
       }
       if (savedComparison) {
         const parsedComparison = JSON.parse(savedComparison);
@@ -586,6 +621,42 @@ export default function CatalystView() {
     window.localStorage.removeItem('catalyst:comparison');
     setWorkspaceMessage({ text: 'Company comparison cleared' });
   }
+  function runStudy(study: (typeof snapshot.studies)[number]) {
+    const evidenceIds = (study.evidenceIds ?? []).filter((eventId) => eventById.has(eventId));
+    const runSourceState = sourceState === 'loading' ? 'fallback' : sourceState;
+    const manifest = JSON.stringify({
+      company: snapshot.company.cik,
+      study: { id: study.id, title: study.title, state: study.state, evidenceIds },
+      evidence: evidenceIds.map((eventId) => ({
+        eventId,
+        label: eventLabels[eventId] ?? null,
+        note: eventNotes[eventId]?.trim() ?? '',
+      })),
+      metrics: metrics.map(({ id, value, period }) => ({ id, value, period })),
+      previousMetrics,
+      metricHistory,
+      filings: filings.map(({ id, form, filedAt, periodEnd, accession, status }) => ({ id, form, filedAt, periodEnd, accession, status })),
+      source: { state: runSourceState, quality: sourceQuality },
+    });
+    const run: StudyRun = {
+      id: `run-${Date.now()}`,
+      executedAt: new Date().toISOString(),
+      asOfPeriod: sourceQuality.currentPeriod ?? metrics[0]?.period ?? 'Unavailable',
+      sourceState: runSourceState,
+      qualityStatus: sourceQuality.status,
+      evidenceCount: evidenceIds.length,
+      filingCount: filings.length,
+      metricCount: metrics.length,
+      transformCount: 3,
+      inputSignature: inputSignature(manifest),
+    };
+    setStudyRuns((runs) => {
+      const next = { ...runs, [study.id]: run };
+      window.localStorage.setItem('catalyst:study-runs', JSON.stringify(next));
+      return next;
+    });
+    setWorkspaceMessage({ text: `Study snapshot captured: ${study.title}` });
+  }
   async function copyCitation() {
     const sourceUrl = selected.evidence[0]?.sourceUrl ?? '';
     const citation = `${selected.title} (${selected.date}). ${selected.summary} Source: ${selected.sourceLabel}. ${sourceUrl}`;
@@ -705,6 +776,13 @@ export default function CatalystView() {
         return next;
       });
     }
+    setStudyRuns((runs) => {
+      if (!runs[deleteTarget.id]) return runs;
+      const next = { ...runs };
+      delete next[deleteTarget.id];
+      window.localStorage.setItem('catalyst:study-runs', JSON.stringify(next));
+      return next;
+    });
     setDeleteTarget(null);
   }
   function advanceHypothesis(id: string) {
@@ -737,6 +815,7 @@ export default function CatalystView() {
       sourceQuality,
       hypotheses,
       studies,
+      studyRuns,
       comparison,
       provenance: snapshot.provenance,
     };
@@ -862,6 +941,7 @@ export default function CatalystView() {
       exportedAt: new Date().toISOString(),
       company: snapshot.company,
       study,
+      lastRun: studyRuns[study.id] ?? null,
       evidence,
       metrics: {
         current: metrics,
@@ -932,6 +1012,7 @@ export default function CatalystView() {
         sourceQuality?: SourceQuality;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
+        studyRuns?: Record<string, StudyRun>;
         comparison?: SecComparison | null;
       };
       if (payload.company?.cik !== snapshot.company.cik || !Array.isArray(payload.metrics) || !Array.isArray(payload.hypotheses) || !Array.isArray(payload.studies)) {
@@ -975,6 +1056,10 @@ export default function CatalystView() {
       }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
+      const nextStudyRuns = payload.studyRuns && typeof payload.studyRuns === 'object' && !Array.isArray(payload.studyRuns)
+        ? Object.fromEntries(Object.entries(payload.studyRuns).filter(([, value]) => isStudyRun(value))) as Record<string, StudyRun>
+        : {};
+      setStudyRuns(nextStudyRuns);
       if (payload.comparison === null) {
         setComparison(null);
         window.localStorage.removeItem('catalyst:comparison');
@@ -985,6 +1070,7 @@ export default function CatalystView() {
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
       window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(payload.hypotheses));
       window.localStorage.setItem('catalyst:studies', JSON.stringify(payload.studies));
+      window.localStorage.setItem('catalyst:study-runs', JSON.stringify(nextStudyRuns));
       setWorkspaceMessage({ text: 'Workspace imported' });
     } catch {
       setWorkspaceMessage({ text: 'Import failed: choose a Catalyst MSFT export', error: true });
@@ -1011,7 +1097,7 @@ export default function CatalystView() {
             </span>
             Catalyst
             <span className="ml-auto text-[9px] tracking-[.08em] text-slate-600">
-              PHASE 01
+              RESEARCH CORE
             </span>
           </div>
           <div className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">
@@ -1725,7 +1811,9 @@ export default function CatalystView() {
                   </label>
                 )}
               >
-                {visibleStudies.length ? visibleStudies.map((s) => (
+                {visibleStudies.length ? visibleStudies.map((s) => {
+                  const run = studyRuns[s.id];
+                  return (
                   <div
                     className="flex items-center gap-2.5 border-t border-slate-800/80 py-3.5"
                     key={s.id}
@@ -1743,6 +1831,13 @@ export default function CatalystView() {
                       <small className="text-[10px] text-slate-600">
                         {s.evidenceIds?.length ?? 0} linked event{(s.evidenceIds?.length ?? 0) === 1 ? '' : 's'}
                       </small>
+                      {run ? (
+                        <small className="text-[10px] text-emerald-300/80">
+                          Last run {formatSourceTime(run.executedAt)} · {run.asOfPeriod} · {run.sourceState} source · quality {run.qualityStatus} · {run.inputSignature}
+                        </small>
+                      ) : (
+                        <small className="text-[10px] text-slate-600">No reproducible run captured</small>
+                      )}
                       {s.evidenceIds?.length ? (
                         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <span className="text-[10px] text-slate-600">Jump to</span>
@@ -1782,6 +1877,16 @@ export default function CatalystView() {
                   >
                     <Download size={13} />
                   </button>
+                  <button
+                    type="button"
+                    aria-label={`Run snapshot for ${s.title}`}
+                    title="Capture reproducible study snapshot"
+                    onClick={() => runStudy(s)}
+                    disabled={sourceState === 'loading'}
+                    className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Play size={13} />
+                  </button>
                   <button type="button" onClick={() => toggleStudyState(s.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
                     {s.state === 'active' ? 'Queue' : 'Start'}
                   </button>
@@ -1791,7 +1896,8 @@ export default function CatalystView() {
                     </button>
                   )}
                   </div>
-                )) : (
+                  );
+                }) : (
                   <div className="border-t border-slate-800/80 py-8 text-center">
                     <strong className="block text-sm font-semibold text-slate-300">No matching studies</strong>
                     <span className="mt-1 block text-xs text-slate-500">Try another queue state.</span>
@@ -1862,7 +1968,7 @@ export default function CatalystView() {
                 <input ref={importInputRef} type="file" accept="application/json,.json" onChange={importWorkspace} className="hidden" />
                 {workspaceMessage && <output className={`text-[10px] ${workspaceMessage.error ? 'text-red-300' : 'text-emerald-300'}`}>{workspaceMessage.text}</output>}
               </div>
-              <span>Phase 1 · Foundation &amp; vertical slice</span>
+              <span>Research core · local-first workspace</span>
             </footer>
           </div>
         </section>

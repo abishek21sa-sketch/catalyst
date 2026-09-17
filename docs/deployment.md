@@ -2,9 +2,9 @@
 
 ## Recommended topology
 
-1. **GitHub — canonical source.** Create a private GitHub repository and push the local `main` history. GitHub’s documented flow supports adding an existing local repository and pushing it with GitHub CLI or Git.
+1. **GitHub — canonical source.** The canonical repository is [abishek21sa-sketch/catalyst](https://github.com/abishek21sa-sketch/catalyst), with the production source on `main`.
 2. **Sites — private product preview.** Keep the current private Sites deployment for review while the product is still in early development.
-3. **Vercel — public app candidate.** Vercel supports Git-connected Vite deployments and creates preview deployments for commits and pull requests. Catalyst now includes the Nitro Vercel adapter and a dedicated `.output` build path with a native Nitro server route for `/api/sec`.
+3. **Vercel — production app.** The public deployment is [catalyst-quant-research.vercel.app](https://catalyst-quant-research.vercel.app). Vercel runs the Nitro build and exposes the native `/api/sec` server route.
 4. **Render — static or service option.** Render’s static-site path is a good fit for the fixture-only frontend (`npm run build`, publish `dist`), but the current `/api/sec` route needs a compatible server runtime. Use Render after either adding a Node adapter or intentionally shipping a static-only mode.
 
 ## Current readiness
@@ -15,15 +15,15 @@
 - App-specific lint is covered by CI; the generated component catalog remains outside that check because it carries starter lint findings.
 - The SEC route is live-optional and falls back to the local fixture.
 - The GitHub repository is connected to Vercel; pushes to `main` use the checked-in Vercel build settings.
+- Production smoke checks cover `/`, live Microsoft SEC facts, and an alternate-company CIK response.
 - Render remains unconnected and is still a future alternative.
 
 ## Safe rollout order
 
-1. Create the GitHub repository as private and push `main`.
-2. Connect GitHub to a preview environment first.
-3. Verify `/` and `/api/sec?cik=0000789019` in the preview; the latter should return JSON.
-4. Choose Vercel for the server-capable app, or Render static only if the live route is disabled.
-5. Add a custom domain and production secrets only after the preview is healthy.
+1. Keep `main` green with the local release gate.
+2. Verify `/` and `/api/sec?cik=0000789019` after each production deploy.
+3. Use Vercel for the server-capable app; use Render only after adding a compatible server runtime or intentionally shipping static-only mode.
+4. Add a custom domain and production secrets only after durable workspace persistence is ready.
 
 ## Local release gate
 
