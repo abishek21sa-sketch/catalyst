@@ -727,6 +727,37 @@ export default function CatalystView() {
     URL.revokeObjectURL(downloadUrl);
     setWorkspaceMessage({ text: 'Metric history CSV exported' });
   }
+  function exportEventReviewCsv() {
+    const view = `kind=${eventFilter}; signal=${signalFilter}; label=${labelFilter}`;
+    const rows = [
+      ['date', 'kind', 'title', 'signal', 'analyst_label', 'confidence', 'source', 'note', 'linked_hypotheses', 'linked_studies', 'view'],
+      ...visibleEvents.map((event) => {
+        const linkedHypothesisTitles = hypotheses.filter((hypothesis) => hypothesis.evidenceIds?.includes(event.id)).map((hypothesis) => hypothesis.title).join('; ');
+        const linkedStudyTitles = studies.filter((study) => study.evidenceIds?.includes(event.id)).map((study) => study.title).join('; ');
+        return [
+          event.date,
+          kindLabel[event.kind],
+          event.title,
+          event.signal,
+          eventLabelText(eventLabels[event.id]) ?? '',
+          `${Math.round(event.confidence * 100)}%`,
+          event.sourceLabel,
+          eventNotes[event.id]?.trim() ?? '',
+          linkedHypothesisTitles,
+          linkedStudyTitles,
+          view,
+        ];
+      }),
+    ];
+    const csv = rows.map((row) => row.map((value) => csvCell(value)).join(',')).join('\n');
+    const downloadUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-event-review.csv`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: 'Event review CSV exported' });
+  }
   async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1573,6 +1604,13 @@ export default function CatalystView() {
                   className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
                 >
                   <Download size={12} /> Export metrics CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={exportEventReviewCsv}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                >
+                  <Download size={12} /> Export event review
                 </button>
                 <button
                   type="button"
