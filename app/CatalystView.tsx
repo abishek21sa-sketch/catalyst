@@ -68,6 +68,7 @@ const eventById = new Map(snapshot.events.map((event) => [event.id, event] as co
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
 type EventLabel = 'catalyst' | 'risk' | 'context' | 'monitor';
+type EventLabelFilter = 'all' | EventLabel;
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
 type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
 type MetricHistoryPoint = { value: number; period: string };
@@ -178,6 +179,7 @@ export default function CatalystView() {
   const [eventLabels, setEventLabels] = useState<Record<string, EventLabel>>({});
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
+  const [labelFilter, setLabelFilter] = useState<EventLabelFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
   const [draftKind, setDraftKind] = useState<'hypothesis' | 'study' | null>(
     null,
@@ -282,9 +284,10 @@ export default function CatalystView() {
     () =>
       snapshot.events.filter((event) =>
         (eventFilter === 'all' || event.kind === eventFilter) &&
-        (signalFilter === 'all' || event.signal === signalFilter),
+        (signalFilter === 'all' || event.signal === signalFilter) &&
+        (labelFilter === 'all' || eventLabels[event.id] === labelFilter),
       ),
-    [eventFilter, signalFilter],
+    [eventFilter, eventLabels, labelFilter, signalFilter],
   );
   const linkedHypotheses = useMemo(
     () => hypotheses.filter((hypothesis) => hypothesis.evidenceIds?.includes(selected.id)),
@@ -328,14 +331,15 @@ export default function CatalystView() {
       ? results.filter((result) => `${result.title} ${result.meta}`.toLowerCase().includes(query)).slice(0, 8)
       : results.slice(0, 8);
   }, [hypotheses, searchQuery, studies]);
-  function eventsForFilters(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter) {
+  function eventsForFilters(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter, nextLabelFilter: EventLabelFilter) {
     return snapshot.events.filter((event) =>
       (nextEventFilter === 'all' || event.kind === nextEventFilter) &&
-      (nextSignalFilter === 'all' || event.signal === nextSignalFilter),
+      (nextSignalFilter === 'all' || event.signal === nextSignalFilter) &&
+      (nextLabelFilter === 'all' || eventLabels[event.id] === nextLabelFilter),
     );
   }
-  function keepSelectionInView(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter) {
-    const nextEvents = eventsForFilters(nextEventFilter, nextSignalFilter);
+  function keepSelectionInView(nextEventFilter: EventFilter, nextSignalFilter: SignalFilter, nextLabelFilter: EventLabelFilter) {
+    const nextEvents = eventsForFilters(nextEventFilter, nextSignalFilter, nextLabelFilter);
     if (nextEvents.length && !nextEvents.some((event) => event.id === selectedId)) {
       setSelectedId(nextEvents[0].id);
       setNoteMessage('');
@@ -347,15 +351,20 @@ export default function CatalystView() {
   function changeEventFilter(nextFilter: EventFilter) {
     setEventFilter(nextFilter);
     setActiveNav(nextFilter === 'all' ? 'Event stream' : nextFilter === 'filing' ? 'Filings' : nextFilter === 'metric' ? 'Metrics' : 'Hypotheses');
-    keepSelectionInView(nextFilter, signalFilter);
+    keepSelectionInView(nextFilter, signalFilter, labelFilter);
   }
   function changeSignalFilter(nextFilter: SignalFilter) {
     setSignalFilter(nextFilter);
-    keepSelectionInView(eventFilter, nextFilter);
+    keepSelectionInView(eventFilter, nextFilter, labelFilter);
+  }
+  function changeLabelFilter(nextFilter: EventLabelFilter) {
+    setLabelFilter(nextFilter);
+    keepSelectionInView(eventFilter, signalFilter, nextFilter);
   }
   function resetEventFilters() {
     setEventFilter('all');
     setSignalFilter('all');
+    setLabelFilter('all');
     setActiveNav('Event stream');
     setSelectedId(snapshot.events[0].id);
     setNoteMessage('');
@@ -382,6 +391,7 @@ export default function CatalystView() {
     setSelectedId(eventId);
     setEventFilter('all');
     setSignalFilter('all');
+    setLabelFilter('all');
     setNoteMessage('');
     setEvidenceLinkMessage('');
     setHypothesisLinkId('');
@@ -1060,6 +1070,17 @@ export default function CatalystView() {
                         <option value="neutral">Neutral</option>
                       </select>
                     </label>
+                    <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
+                      <span className="sr-only">Filter analyst label</span>
+                      <select
+                        value={labelFilter}
+                        onChange={(event) => changeLabelFilter(event.target.value as EventLabelFilter)}
+                        className="bg-transparent text-[11px] text-slate-400 outline-none"
+                      >
+                        <option value="all">All labels</option>
+                        {eventLabelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </label>
                   </div>
                 </div>
                 <div className="mt-5 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
@@ -1078,7 +1099,7 @@ export default function CatalystView() {
                   <span className="text-slate-600">
                     {String(visibleEvents.length).padStart(2, '0')} events
                   </span>
-                  {(eventFilter !== 'all' || signalFilter !== 'all') && (
+                  {(eventFilter !== 'all' || signalFilter !== 'all' || labelFilter !== 'all') && (
                     <button
                       type="button"
                       onClick={resetEventFilters}
