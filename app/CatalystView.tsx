@@ -69,7 +69,14 @@ type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
 type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
+type MetricHistoryPoint = { value: number; period: string };
+type MetricHistory = Record<string, MetricHistoryPoint[]>;
 const fixtureSourceQuality: SourceQuality = { status: 'fixture', currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 };
+const fixtureMetricHistory: MetricHistory = {
+  revenue: [{ value: snapshot.metrics[0].value, period: 'FY 2024' }, { value: fixturePriorMetrics.revenue, period: 'FY 2023' }],
+  operatingIncome: [{ value: snapshot.metrics[1].value, period: 'FY 2024' }, { value: fixturePriorMetrics.operatingIncome, period: 'FY 2023' }],
+  netIncome: [{ value: snapshot.metrics[2].value, period: 'FY 2024' }, { value: fixturePriorMetrics.netIncome, period: 'FY 2023' }],
+};
 type NavLabel = (typeof nav)[number][0];
 type SearchResult = {
   id: string;
@@ -135,6 +142,7 @@ export default function CatalystView() {
   const [sourceQuality, setSourceQuality] = useState<SourceQuality>(fixtureSourceQuality);
   const [metrics, setMetrics] = useState(snapshot.metrics);
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
+  const [metricHistory, setMetricHistory] = useState<MetricHistory>(fixtureMetricHistory);
   const [filings, setFilings] = useState(snapshot.filings);
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
@@ -162,6 +170,7 @@ export default function CatalystView() {
       const savedStudies = window.localStorage.getItem('catalyst:studies');
       const savedMetrics = window.localStorage.getItem('catalyst:metrics');
       const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
+      const savedMetricHistory = window.localStorage.getItem('catalyst:metric-history');
       const savedFilings = window.localStorage.getItem('catalyst:filings');
       const savedEventNotes = window.localStorage.getItem('catalyst:event-notes');
       const savedSourceState = window.localStorage.getItem('catalyst:source-state');
@@ -174,6 +183,10 @@ export default function CatalystView() {
       if (savedPreviousMetrics) {
         const parsedPreviousMetrics = JSON.parse(savedPreviousMetrics);
         if (parsedPreviousMetrics && typeof parsedPreviousMetrics === 'object' && !Array.isArray(parsedPreviousMetrics)) setTimeout(() => setPreviousMetrics(parsedPreviousMetrics), 0);
+      }
+      if (savedMetricHistory) {
+        const parsedMetricHistory = JSON.parse(savedMetricHistory);
+        if (parsedMetricHistory && typeof parsedMetricHistory === 'object' && !Array.isArray(parsedMetricHistory)) setTimeout(() => setMetricHistory(parsedMetricHistory), 0);
       }
       if (savedFilings) {
         const parsedFilings = JSON.parse(savedFilings);
@@ -369,6 +382,7 @@ export default function CatalystView() {
         };
         priorMetrics?: Record<string, number>;
         periods?: Record<string, string>;
+        history?: MetricHistory;
         quality?: SourceQuality;
         filings?: Filing[];
       };
@@ -392,6 +406,9 @@ export default function CatalystView() {
         const nextPreviousMetrics = payload.priorMetrics ?? fixturePriorMetrics;
         setPreviousMetrics(nextPreviousMetrics);
         window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(nextPreviousMetrics));
+        const nextMetricHistory = payload.history ?? fixtureMetricHistory;
+        setMetricHistory(nextMetricHistory);
+        window.localStorage.setItem('catalyst:metric-history', JSON.stringify(nextMetricHistory));
         const nextFilings = payload.filings?.length ? payload.filings : snapshot.filings;
         setFilings(nextFilings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(nextFilings));
@@ -405,6 +422,8 @@ export default function CatalystView() {
         window.localStorage.setItem('catalyst:metrics', JSON.stringify(snapshot.metrics));
         setPreviousMetrics(fixturePriorMetrics);
         window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
+        setMetricHistory(fixtureMetricHistory);
+        window.localStorage.setItem('catalyst:metric-history', JSON.stringify(fixtureMetricHistory));
         setFilings(snapshot.filings);
         setSourceState('fallback');
         window.localStorage.setItem('catalyst:source-state', 'fallback');
@@ -419,6 +438,8 @@ export default function CatalystView() {
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(snapshot.metrics));
       setPreviousMetrics(fixturePriorMetrics);
       window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(fixturePriorMetrics));
+      setMetricHistory(fixtureMetricHistory);
+      window.localStorage.setItem('catalyst:metric-history', JSON.stringify(fixtureMetricHistory));
       setFilings(snapshot.filings);
       setSourceState('fallback');
       window.localStorage.setItem('catalyst:source-state', 'fallback');
@@ -560,6 +581,7 @@ export default function CatalystView() {
       filings,
       metrics,
       previousMetrics,
+      metricHistory,
       events: snapshot.events,
       eventNotes,
       sourceState,
@@ -625,6 +647,7 @@ export default function CatalystView() {
         company?: { cik?: string };
         metrics?: typeof snapshot.metrics;
         previousMetrics?: Record<string, number>;
+        metricHistory?: MetricHistory;
         filings?: typeof snapshot.filings;
         eventNotes?: Record<string, string>;
         sourceState?: 'fixture' | 'live' | 'fallback';
@@ -640,6 +663,9 @@ export default function CatalystView() {
       const nextPreviousMetrics = payload.previousMetrics ?? fixturePriorMetrics;
       setPreviousMetrics(nextPreviousMetrics);
       window.localStorage.setItem('catalyst:previous-metrics', JSON.stringify(nextPreviousMetrics));
+      const nextMetricHistory = payload.metricHistory ?? fixtureMetricHistory;
+      setMetricHistory(nextMetricHistory);
+      window.localStorage.setItem('catalyst:metric-history', JSON.stringify(nextMetricHistory));
       if (Array.isArray(payload.filings) && payload.filings.length) {
         setFilings(payload.filings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(payload.filings));
@@ -1247,7 +1273,7 @@ export default function CatalystView() {
               <FilingCard filings={filings} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
-              <MetricsCard metrics={metrics} previousMetrics={previousMetrics} />
+              <MetricsCard metrics={metrics} previousMetrics={previousMetrics} metricHistory={metricHistory} />
             </div>
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <ResearchCard
@@ -1509,7 +1535,7 @@ function FilingCard({ filings }: { filings: Filing[] }) {
   );
 }
 
-function MetricsCard({ metrics, previousMetrics }: { metrics: Metric[]; previousMetrics: Record<string, number> }) {
+function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Metric[]; previousMetrics: Record<string, number>; metricHistory: MetricHistory }) {
   return (
     <section id="metrics-panel" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5 xl:col-span-2">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -1548,6 +1574,42 @@ function MetricsCard({ metrics, previousMetrics }: { metrics: Metric[]; previous
           </article>
           );
         })}
+      </div>
+      <div className="mt-5 border-t border-slate-800 pt-4">
+        <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-end">
+          <div>
+            <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">ANNUAL TREND</span>
+            <h3 className="mt-1 text-sm font-semibold text-slate-300">Filing-period comparison</h3>
+          </div>
+          <span className="text-[10px] text-slate-600">Newest fact highlighted · up to 5 annual periods</span>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {metrics.map((metric) => {
+            const key = metric.id === 'revenue' ? 'revenue' : metric.id === 'operating-income' ? 'operatingIncome' : 'netIncome';
+            const points = (metricHistory[key]?.length ? metricHistory[key] : [{ value: metric.value, period: metric.period }]).slice(0, 5).reverse();
+            const scale = Math.max(...points.map((point) => Math.abs(point.value)), 1);
+            return (
+              <div key={`${metric.id}-trend`} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-slate-400">{metric.label}</span>
+                  <span className="text-[10px] text-slate-600">{points.length} year{points.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="mt-3 flex h-24 items-end gap-1.5" title={`${metric.label} annual trend from ${points[0]?.period} to ${points[points.length - 1]?.period}`}>
+                  {points.map((point, index) => (
+                    <div key={`${point.period}-${point.value}`} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-1">
+                      <span
+                        className={`block w-full rounded-t ${index === points.length - 1 ? 'bg-emerald-300' : 'bg-slate-600'}`}
+                        style={{ height: `${Math.max(8, (Math.abs(point.value) / scale) * 100)}%` }}
+                        title={`${point.period}: ${formatMetric(point.value)}`}
+                      />
+                      <span className="truncate text-center text-[9px] text-slate-600">{point.period.replace('FY ', '')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

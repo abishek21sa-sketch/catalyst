@@ -36,6 +36,13 @@ export async function GET(request: Request) {
       const prior = annualRows(concept)[1];
       return prior ? [[key, prior.val]] : [];
     }));
+    const history = Object.fromEntries(Object.entries(metricConcepts).map(([key, concept]) => [
+      key,
+      annualRows(concept).slice(0, 5).map((row) => ({
+        value: row.val,
+        period: row.fy ? `FY ${row.fy}` : row.end ?? row.filed ?? 'Annual',
+      })),
+    ]));
     const periods = Object.fromEntries(Object.entries(metricConcepts).flatMap(([key, concept]) => {
       const annual = annualRows(concept)[0];
       return annual ? [[key, annual.fy ? `FY ${annual.fy}` : annual.end ?? annual.filed ?? 'Annual']] : [];
@@ -75,7 +82,7 @@ export async function GET(request: Request) {
         sourceUrl: `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replaceAll('-', '')}/${accession}-index.html`,
         status: 'verified' as const,
       }));
-    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, priorMetrics, periods, quality, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
+    return Response.json({ mode: 'live', entityName: payload.entityName ?? 'Unknown filer', cik, concepts, metrics, priorMetrics, periods, history, quality, filings, sourceUrl, fetchedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'public, max-age=300' } });
   } catch {
     const fallback = loadSecFixture();
     return Response.json({ mode: 'fixture-fallback', entityName: fallback.company.name, cik: fallback.company.cik, concepts: fallback.metrics.map((metric) => metric.concept), quality: { status: 'fixture' as const, currentPeriod: '2024-06-30', priorPeriod: null, alignedCurrentPeriod: true, alignedPriorPeriod: false, duplicateFacts: 0, amendedFilings: 0, missingMetrics: 0 }, filings: fallback.filings, sourceUrl: fallback.filings[0].sourceUrl, fetchedAt: fallback.provenance.capturedAt }, { headers: { 'Cache-Control': 'no-store' } });
