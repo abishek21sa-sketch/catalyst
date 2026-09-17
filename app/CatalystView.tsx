@@ -89,6 +89,10 @@ function formatSourceTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
+function csvCell(value: string | number) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
 function EventRow({
   event,
   selected,
@@ -637,6 +641,27 @@ export default function CatalystView() {
     link.click();
     URL.revokeObjectURL(downloadUrl);
     setWorkspaceMessage({ text: 'Markdown brief exported' });
+  }
+  function exportMetricHistoryCsv() {
+    const periods = Array.from(new Set(Object.values(metricHistory).flat().map((point) => point.period))).sort((a, b) => b.localeCompare(a));
+    const valuesByMetric = Object.fromEntries(Object.entries(metricHistory).map(([key, points]) => [key, new Map(points.map((point) => [point.period, point.value]))]));
+    const rows = [
+      ['period', 'revenue_usd', 'operating_income_usd', 'net_income_usd'],
+      ...periods.map((period) => [
+        period,
+        valuesByMetric.revenue?.get(period) ?? '',
+        valuesByMetric.operatingIncome?.get(period) ?? '',
+        valuesByMetric.netIncome?.get(period) ?? '',
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((value) => csvCell(value)).join(',')).join('\n');
+    const downloadUrl = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-metrics.csv`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: 'Metric history CSV exported' });
   }
   async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -1438,6 +1463,13 @@ export default function CatalystView() {
                   className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
                 >
                   <FileText size={12} /> Export brief
+                </button>
+                <button
+                  type="button"
+                  onClick={exportMetricHistoryCsv}
+                  className="inline-flex items-center gap-1.5 rounded border border-slate-800 px-2 py-1 text-[10px] text-slate-400 hover:border-emerald-900 hover:text-emerald-300"
+                >
+                  <Download size={12} /> Export metrics CSV
                 </button>
                 <button
                   type="button"
