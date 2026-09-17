@@ -114,6 +114,18 @@ function eventLabelText(value?: EventLabel) {
   return value ? eventLabelOptions.find((option) => option.value === value)?.label : undefined;
 }
 
+function isSecComparison(value: unknown): value is SecComparison {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<SecComparison>;
+  return typeof candidate.entityName === 'string' &&
+    typeof candidate.cik === 'string' &&
+    /^\d{10}$/.test(candidate.cik) &&
+    Boolean(candidate.metrics && typeof candidate.metrics === 'object') &&
+    Boolean(candidate.quality && typeof candidate.quality === 'object') &&
+    Array.isArray(candidate.filings) &&
+    typeof candidate.fetchedAt === 'string';
+}
+
 function csvCell(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -222,6 +234,7 @@ export default function CatalystView() {
       const savedSourceState = window.localStorage.getItem('catalyst:source-state');
       const savedSourceUpdatedAt = window.localStorage.getItem('catalyst:source-updated-at');
       const savedSourceQuality = window.localStorage.getItem('catalyst:source-quality');
+      const savedComparison = window.localStorage.getItem('catalyst:comparison');
       if (savedMetrics) {
         const parsedMetrics = JSON.parse(savedMetrics);
         if (Array.isArray(parsedMetrics)) setTimeout(() => setMetrics(parsedMetrics), 0);
@@ -269,6 +282,10 @@ export default function CatalystView() {
       if (savedStudies) {
         const parsedStudies = JSON.parse(savedStudies);
         setTimeout(() => setStudies(parsedStudies), 0);
+      }
+      if (savedComparison) {
+        const parsedComparison = JSON.parse(savedComparison);
+        if (isSecComparison(parsedComparison)) setTimeout(() => setComparison(parsedComparison), 0);
       }
     } catch {
       // Device storage is optional; the fixture remains the safe default.
@@ -542,7 +559,7 @@ export default function CatalystView() {
       if (!response.ok || payload.mode !== 'live' || !payload.entityName || !payload.metrics?.revenue || !payload.quality) {
         throw new Error('Comparison data unavailable');
       }
-      setComparison({
+      const nextComparison: SecComparison = {
         entityName: payload.entityName,
         cik: payload.cik ?? cik,
         metrics: payload.metrics,
@@ -553,7 +570,9 @@ export default function CatalystView() {
         filings: payload.filings ?? [],
         sourceUrl: payload.sourceUrl ?? `https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`,
         fetchedAt: payload.fetchedAt ?? new Date().toISOString(),
-      });
+      };
+      setComparison(nextComparison);
+      window.localStorage.setItem('catalyst:comparison', JSON.stringify(nextComparison));
       setComparisonOpen(false);
       setWorkspaceMessage({ text: `SEC comparison loaded: ${payload.entityName}` });
     } catch {
@@ -561,6 +580,11 @@ export default function CatalystView() {
     } finally {
       setComparisonLoading(false);
     }
+  }
+  function clearComparison() {
+    setComparison(null);
+    window.localStorage.removeItem('catalyst:comparison');
+    setWorkspaceMessage({ text: 'Company comparison cleared' });
   }
   async function copyCitation() {
     const sourceUrl = selected.evidence[0]?.sourceUrl ?? '';
@@ -713,6 +737,7 @@ export default function CatalystView() {
       sourceQuality,
       hypotheses,
       studies,
+      comparison,
       provenance: snapshot.provenance,
     };
     const downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
@@ -907,9 +932,13 @@ export default function CatalystView() {
         sourceQuality?: SourceQuality;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
+        comparison?: SecComparison | null;
       };
       if (payload.company?.cik !== snapshot.company.cik || !Array.isArray(payload.metrics) || !Array.isArray(payload.hypotheses) || !Array.isArray(payload.studies)) {
         throw new Error('Unsupported workspace file');
+      }
+      if (payload.comparison !== undefined && payload.comparison !== null && !isSecComparison(payload.comparison)) {
+        throw new Error('Unsupported comparison data');
       }
       setMetrics(payload.metrics);
       const nextPreviousMetrics = payload.previousMetrics ?? fixturePriorMetrics;
@@ -946,6 +975,13 @@ export default function CatalystView() {
       }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
+      if (payload.comparison === null) {
+        setComparison(null);
+        window.localStorage.removeItem('catalyst:comparison');
+      } else if (payload.comparison) {
+        setComparison(payload.comparison);
+        window.localStorage.setItem('catalyst:comparison', JSON.stringify(payload.comparison));
+      }
       window.localStorage.setItem('catalyst:metrics', JSON.stringify(payload.metrics));
       window.localStorage.setItem('catalyst:hypotheses', JSON.stringify(payload.hypotheses));
       window.localStorage.setItem('catalyst:studies', JSON.stringify(payload.studies));
@@ -1581,7 +1617,7 @@ export default function CatalystView() {
                 workspaceCompany={snapshot.company}
                 workspaceMetrics={metrics}
                 onExport={exportComparison}
-                onClear={() => setComparison(null)}
+                onClear={clearComparison}
               />
             )}
             <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
