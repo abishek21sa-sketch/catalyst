@@ -67,6 +67,7 @@ const kindLabel: Record<Event['kind'], string> = {
 const eventById = new Map(snapshot.events.map((event) => [event.id, event] as const));
 type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
+type EventLabel = 'catalyst' | 'risk' | 'context' | 'monitor';
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
 type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
 type MetricHistoryPoint = { value: number; period: string };
@@ -76,6 +77,18 @@ const fixtureMetricHistory: MetricHistory = {
   revenue: [{ value: snapshot.metrics[0].value, period: 'FY 2024' }, { value: fixturePriorMetrics.revenue, period: 'FY 2023' }],
   operatingIncome: [{ value: snapshot.metrics[1].value, period: 'FY 2024' }, { value: fixturePriorMetrics.operatingIncome, period: 'FY 2023' }],
   netIncome: [{ value: snapshot.metrics[2].value, period: 'FY 2024' }, { value: fixturePriorMetrics.netIncome, period: 'FY 2023' }],
+};
+const eventLabelOptions: Array<{ value: EventLabel; label: string }> = [
+  { value: 'catalyst', label: 'Catalyst' },
+  { value: 'risk', label: 'Risk' },
+  { value: 'context', label: 'Context' },
+  { value: 'monitor', label: 'Monitor' },
+];
+const eventLabelClasses: Record<EventLabel, string> = {
+  catalyst: 'border-emerald-900/70 bg-emerald-300/10 text-emerald-300',
+  risk: 'border-amber-900/70 bg-amber-300/10 text-amber-300',
+  context: 'border-slate-700 bg-slate-800/70 text-slate-400',
+  monitor: 'border-sky-900/70 bg-sky-300/10 text-sky-300',
 };
 type NavLabel = (typeof nav)[number][0];
 type SearchResult = {
@@ -89,16 +102,26 @@ function formatSourceTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
+function isEventLabel(value: unknown): value is EventLabel {
+  return typeof value === 'string' && eventLabelOptions.some((option) => option.value === value);
+}
+
+function eventLabelText(value?: EventLabel) {
+  return value ? eventLabelOptions.find((option) => option.value === value)?.label : undefined;
+}
+
 function csvCell(value: string | number) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
 function EventRow({
   event,
+  label,
   selected,
   onSelect,
 }: {
   event: Event;
+  label?: EventLabel;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -113,7 +136,10 @@ function EventRow({
       />
       <span className="grid min-w-0 flex-1 gap-1.5">
         <span className="flex justify-between gap-3 text-[10px] font-bold uppercase tracking-[.13em] text-emerald-300">
-          <span>{kindLabel[event.kind]}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span>{kindLabel[event.kind]}</span>
+            {label && <span className={`truncate rounded border px-1.5 py-0.5 text-[9px] tracking-[.08em] ${eventLabelClasses[label]}`}>{eventLabelText(label)}</span>}
+          </span>
           <span className="font-normal tracking-normal text-slate-500">
             {event.date}
           </span>
@@ -149,6 +175,7 @@ export default function CatalystView() {
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [metricHistory, setMetricHistory] = useState<MetricHistory>(fixtureMetricHistory);
   const [filings, setFilings] = useState(snapshot.filings);
+  const [eventLabels, setEventLabels] = useState<Record<string, EventLabel>>({});
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
@@ -167,6 +194,7 @@ export default function CatalystView() {
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [citationMessage, setCitationMessage] = useState('');
   const [noteMessage, setNoteMessage] = useState('');
+  const [labelMessage, setLabelMessage] = useState('');
   const [evidenceLinkMessage, setEvidenceLinkMessage] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -177,6 +205,7 @@ export default function CatalystView() {
       const savedPreviousMetrics = window.localStorage.getItem('catalyst:previous-metrics');
       const savedMetricHistory = window.localStorage.getItem('catalyst:metric-history');
       const savedFilings = window.localStorage.getItem('catalyst:filings');
+      const savedEventLabels = window.localStorage.getItem('catalyst:event-labels');
       const savedEventNotes = window.localStorage.getItem('catalyst:event-notes');
       const savedSourceState = window.localStorage.getItem('catalyst:source-state');
       const savedSourceUpdatedAt = window.localStorage.getItem('catalyst:source-updated-at');
@@ -202,6 +231,13 @@ export default function CatalystView() {
         if (parsedEventNotes && typeof parsedEventNotes === 'object' && !Array.isArray(parsedEventNotes)) {
           const notes = Object.fromEntries(Object.entries(parsedEventNotes).filter(([, value]) => typeof value === 'string')) as Record<string, string>;
           setTimeout(() => setEventNotes(notes), 0);
+        }
+      }
+      if (savedEventLabels) {
+        const parsedEventLabels = JSON.parse(savedEventLabels);
+        if (parsedEventLabels && typeof parsedEventLabels === 'object' && !Array.isArray(parsedEventLabels)) {
+          const labels = Object.fromEntries(Object.entries(parsedEventLabels).filter(([id, value]) => eventById.has(id) && isEventLabel(value))) as Record<string, EventLabel>;
+          setTimeout(() => setEventLabels(labels), 0);
         }
       }
       if (savedSourceState === 'live' || savedSourceState === 'fallback') {
@@ -471,6 +507,14 @@ export default function CatalystView() {
     window.localStorage.setItem('catalyst:event-notes', JSON.stringify(nextNotes));
     setNoteMessage(note ? 'Note saved locally' : 'Note cleared');
   }
+  function updateEventLabel(value: string) {
+    const nextLabels = { ...eventLabels };
+    if (isEventLabel(value)) nextLabels[selected.id] = value;
+    else delete nextLabels[selected.id];
+    setEventLabels(nextLabels);
+    window.localStorage.setItem('catalyst:event-labels', JSON.stringify(nextLabels));
+    setLabelMessage(isEventLabel(value) ? `${eventLabelText(value)} label saved` : 'Label cleared');
+  }
   function linkSelectedEvent() {
     if (!hypothesisLinkId) return;
     setHypotheses((items) => {
@@ -588,6 +632,7 @@ export default function CatalystView() {
       previousMetrics,
       metricHistory,
       events: snapshot.events,
+      eventLabels,
       eventNotes,
       sourceState,
       sourceUpdatedAt,
@@ -627,7 +672,7 @@ export default function CatalystView() {
       ...metrics.map((metric) => `- **${metric.label}:** ${formatMetric(metric.value)} (${metric.period})`),
       '',
       '## Evidence stream',
-      ...snapshot.events.map((event) => `- **${event.title}** (${event.date}) — ${event.summary} _${event.sourceLabel}_`),
+      ...snapshot.events.map((event) => `- **${event.title}** (${event.date})${eventLabels[event.id] ? ` [${eventLabelText(eventLabels[event.id])}]` : ''} — ${event.summary} _${event.sourceLabel}_`),
       '',
       '## Analyst notes',
       ...(notedEvents.length ? notedEvents.map((event) => `- **${event.title}:** ${eventNotes[event.id].trim()}`) : ['- None captured']),
@@ -683,6 +728,7 @@ export default function CatalystView() {
         previousMetrics?: Record<string, number>;
         metricHistory?: MetricHistory;
         filings?: typeof snapshot.filings;
+        eventLabels?: Record<string, EventLabel>;
         eventNotes?: Record<string, string>;
         sourceState?: 'fixture' | 'live' | 'fallback';
         sourceUpdatedAt?: string | null;
@@ -700,6 +746,11 @@ export default function CatalystView() {
       const nextMetricHistory = payload.metricHistory ?? fixtureMetricHistory;
       setMetricHistory(nextMetricHistory);
       window.localStorage.setItem('catalyst:metric-history', JSON.stringify(nextMetricHistory));
+      const nextEventLabels = payload.eventLabels && typeof payload.eventLabels === 'object' && !Array.isArray(payload.eventLabels)
+        ? Object.fromEntries(Object.entries(payload.eventLabels).filter(([id, value]) => eventById.has(id) && isEventLabel(value))) as Record<string, EventLabel>
+        : {};
+      setEventLabels(nextEventLabels);
+      window.localStorage.setItem('catalyst:event-labels', JSON.stringify(nextEventLabels));
       if (Array.isArray(payload.filings) && payload.filings.length) {
         setFilings(payload.filings);
         window.localStorage.setItem('catalyst:filings', JSON.stringify(payload.filings));
@@ -1042,10 +1093,12 @@ export default function CatalystView() {
                     <EventRow
                       key={event.id}
                       event={event}
+                      label={eventLabels[event.id]}
                       selected={selected.id === event.id}
                       onSelect={() => {
                         setSelectedId(event.id);
                         setNoteMessage('');
+                        setLabelMessage('');
                         setHypothesisLinkId('');
                         setStudyLinkId('');
                       }}
@@ -1074,11 +1127,14 @@ export default function CatalystView() {
                     <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">
                       SELECTED EVENT
                     </span>
-                    <span
-                      className={`mt-2 block w-fit rounded px-1.5 py-1 text-[10px] font-bold uppercase tracking-[.08em] ${selected.signal === 'watch' ? 'bg-amber-300/15 text-amber-300' : selected.signal === 'neutral' ? 'bg-slate-700 text-slate-300' : 'bg-emerald-300/15 text-emerald-300'}`}
-                    >
-                      {kindLabel[selected.kind]}
-                    </span>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span
+                        className={`block w-fit rounded px-1.5 py-1 text-[10px] font-bold uppercase tracking-[.08em] ${selected.signal === 'watch' ? 'bg-amber-300/15 text-amber-300' : selected.signal === 'neutral' ? 'bg-slate-700 text-slate-300' : 'bg-emerald-300/15 text-emerald-300'}`}
+                      >
+                        {kindLabel[selected.kind]}
+                      </span>
+                      {eventLabels[selected.id] && <span className={`rounded border px-1.5 py-1 text-[10px] font-bold uppercase tracking-[.08em] ${eventLabelClasses[eventLabels[selected.id]]}`}>{eventLabelText(eventLabels[selected.id])}</span>}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -1100,6 +1156,22 @@ export default function CatalystView() {
                 <p className="mt-2 text-[13px] leading-5 text-slate-400">
                   {selected.summary}
                 </p>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-3">
+                  <label htmlFor="selected-event-label" className="text-[10px] font-bold uppercase tracking-[.13em] text-slate-500">Analyst label</label>
+                  <div className="flex items-center gap-2">
+                    {labelMessage && <output className="text-[10px] text-emerald-300">{labelMessage}</output>}
+                    <select
+                      id="selected-event-label"
+                      aria-label="Set analyst event label"
+                      value={eventLabels[selected.id] ?? ''}
+                      onChange={(event) => updateEventLabel(event.target.value)}
+                      className="rounded-lg border border-slate-800 bg-[#0b1319] px-2.5 py-2 text-[11px] text-slate-400 outline-none focus:border-emerald-900"
+                    >
+                      <option value="">Unlabeled</option>
+                      {eventLabelOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </div>
+                </div>
                 <div className="mt-5 grid grid-cols-[1fr_auto] gap-1.5 text-[11px] text-slate-500">
                   <span>Confidence</span>
                   <strong className="text-emerald-300">
