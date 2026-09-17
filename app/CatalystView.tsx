@@ -1676,7 +1676,53 @@ function FilingCard({ filings }: { filings: Filing[] }) {
   );
 }
 
+function formatBpsDelta(current: number | null, prior: number | null) {
+  if (current === null || prior === null) return 'No prior annual fact';
+  const delta = Math.round((current - prior) * 100);
+  if (delta === 0) return 'Flat';
+  return `${delta > 0 ? '↗' : '↘'} ${Math.abs(delta)} bps`;
+}
+
 function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Metric[]; previousMetrics: Record<string, number>; metricHistory: MetricHistory }) {
+  const revenueHistory = metricHistory.revenue?.length ? metricHistory.revenue : [{ value: metrics[0]?.value ?? 0, period: metrics[0]?.period ?? 'Current' }];
+  const operatingIncomeHistory = metricHistory.operatingIncome?.length ? metricHistory.operatingIncome : [{ value: metrics[1]?.value ?? 0, period: metrics[1]?.period ?? 'Current' }];
+  const netIncomeHistory = metricHistory.netIncome?.length ? metricHistory.netIncome : [{ value: metrics[2]?.value ?? 0, period: metrics[2]?.period ?? 'Current' }];
+  const currentRevenue = revenueHistory[0]?.value ?? null;
+  const priorRevenue = revenueHistory[1]?.value ?? previousMetrics.revenue ?? null;
+  const currentOperatingIncome = operatingIncomeHistory[0]?.value ?? null;
+  const priorOperatingIncome = operatingIncomeHistory[1]?.value ?? previousMetrics.operatingIncome ?? null;
+  const currentNetIncome = netIncomeHistory[0]?.value ?? null;
+  const priorNetIncome = netIncomeHistory[1]?.value ?? previousMetrics.netIncome ?? null;
+  const currentPeriod = revenueHistory[0]?.period ?? metrics[0]?.period ?? 'Current';
+  const priorPeriod = revenueHistory[1]?.period ?? 'Prior annual fact';
+  const revenueGrowth = currentRevenue !== null && priorRevenue !== null && priorRevenue !== 0 ? ((currentRevenue / priorRevenue) - 1) * 100 : null;
+  const operatingMargin = currentRevenue ? ((currentOperatingIncome ?? 0) / currentRevenue) * 100 : null;
+  const priorOperatingMargin = priorRevenue && priorOperatingIncome !== null ? (priorOperatingIncome / priorRevenue) * 100 : null;
+  const netMargin = currentRevenue ? ((currentNetIncome ?? 0) / currentRevenue) * 100 : null;
+  const priorNetMargin = priorRevenue && priorNetIncome !== null ? (priorNetIncome / priorRevenue) * 100 : null;
+  const derivedMetrics = [
+    {
+      label: 'Revenue growth',
+      formula: 'Revenue current ÷ prior − 1',
+      value: revenueGrowth,
+      comparison: revenueGrowth === null ? 'Needs prior annual fact' : `${currentPeriod} vs ${priorPeriod}`,
+      delta: null,
+    },
+    {
+      label: 'Operating margin',
+      formula: 'Operating income ÷ revenue',
+      value: operatingMargin,
+      comparison: priorOperatingMargin === null ? 'Needs prior annual fact' : `${formatBpsDelta(operatingMargin, priorOperatingMargin)} vs prior`,
+      delta: priorOperatingMargin === null || operatingMargin === null ? null : operatingMargin - priorOperatingMargin,
+    },
+    {
+      label: 'Net margin',
+      formula: 'Net income ÷ revenue',
+      value: netMargin,
+      comparison: priorNetMargin === null ? 'Needs prior annual fact' : `${formatBpsDelta(netMargin, priorNetMargin)} vs prior`,
+      delta: priorNetMargin === null || netMargin === null ? null : netMargin - priorNetMargin,
+    },
+  ];
   return (
     <section id="metrics-panel" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5 xl:col-span-2">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -1715,6 +1761,32 @@ function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Met
           </article>
           );
         })}
+      </div>
+      <div className="mt-5 border-t border-slate-800 pt-4">
+        <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-end">
+          <div>
+            <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">RESEARCH TRANSFORMS</span>
+            <h3 className="mt-1 text-sm font-semibold text-slate-300">Derived operating signals</h3>
+          </div>
+          <span className="text-[10px] text-slate-600">Explicit formulas · aligned annual facts</span>
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {derivedMetrics.map((derivedMetric) => (
+            <article key={derivedMetric.label} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-400">{derivedMetric.label}</span>
+                <Sparkles size={13} className="text-emerald-300" />
+              </div>
+              <strong className="mt-3 block text-xl tracking-tight text-slate-200">
+                {derivedMetric.value === null ? '—' : `${derivedMetric.value.toFixed(1)}%`}
+              </strong>
+              <span className={`mt-1 block text-[10px] ${derivedMetric.delta === null || derivedMetric.delta >= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                {derivedMetric.comparison}
+              </span>
+              <span className="mt-3 block border-t border-slate-800 pt-2 font-mono text-[10px] text-slate-600">{derivedMetric.formula}</span>
+            </article>
+          ))}
+        </div>
       </div>
       <div className="mt-5 border-t border-slate-800 pt-4">
         <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-end">
