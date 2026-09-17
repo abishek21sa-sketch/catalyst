@@ -14,6 +14,7 @@ import {
   Download,
   FileText,
   FlaskConical,
+  History,
   Layers3,
   Menu,
   Pencil,
@@ -106,6 +107,10 @@ type SearchResult = {
 
 function formatSourceTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+}
+
+function formatRunTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
 function isEventLabel(value: unknown): value is EventLabel {
@@ -248,6 +253,7 @@ export default function CatalystView() {
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState('');
   const [comparison, setComparison] = useState<SecComparison | null>(null);
+  const [runHistoryStudy, setRunHistoryStudy] = useState<(typeof snapshot.studies)[number] | null>(null);
   const [draftEditTarget, setDraftEditTarget] = useState<DraftTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'hypothesis' | 'study'; id: string; title: string } | null>(null);
   const [workspaceMessage, setWorkspaceMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -1892,6 +1898,17 @@ export default function CatalystView() {
                   >
                     <Play size={13} />
                   </button>
+                  {runHistory.length > 0 && (
+                    <button
+                      type="button"
+                      aria-label={`View run history for ${s.title}`}
+                      title="View run history"
+                      onClick={() => setRunHistoryStudy(s)}
+                      className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300"
+                    >
+                      <History size={13} />
+                    </button>
+                  )}
                   <button type="button" onClick={() => toggleStudyState(s.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
                     {s.state === 'active' ? 'Queue' : 'Start'}
                   </button>
@@ -2018,6 +2035,12 @@ export default function CatalystView() {
         loading={comparisonLoading}
         error={comparisonError}
         onSubmit={loadComparison}
+      />
+      <StudyRunHistoryDialog
+        open={runHistoryStudy !== null}
+        study={runHistoryStudy}
+        runs={runHistoryStudy ? studyRuns[runHistoryStudy.id] ?? [] : []}
+        onOpenChange={(open) => !open && setRunHistoryStudy(null)}
       />
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
@@ -2298,6 +2321,58 @@ function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Met
         </div>
       </div>
     </section>
+  );
+}
+
+function StudyRunHistoryDialog({
+  open,
+  study,
+  runs,
+  onOpenChange,
+}: {
+  open: boolean;
+  study: (typeof snapshot.studies)[number] | null;
+  runs: StudyRun[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="text-slate-100">Study run history</DialogTitle>
+          <DialogDescription className="text-slate-400">
+            {study?.title ?? 'Selected study'} · the latest ten captured input snapshots.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[min(28rem,60vh)] overflow-y-auto pr-1">
+          <div className="grid gap-2">
+            {runs.map((run, index) => (
+              <article key={run.id} className="rounded-lg border border-slate-800/90 bg-[#0b1319]/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-300/10 text-[10px] font-bold text-emerald-300">{index + 1}</span>
+                    {formatRunTime(run.executedAt)}
+                  </span>
+                  <span className={`rounded px-1.5 py-1 text-[9px] font-bold uppercase tracking-[.08em] ${run.qualityStatus === 'pass' ? 'bg-emerald-300/10 text-emerald-300' : run.qualityStatus === 'review' ? 'bg-amber-300/10 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>
+                    {run.qualityStatus}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 text-[10px] text-slate-500 sm:grid-cols-2">
+                  <span>As of <strong className="font-medium text-slate-300">{run.asOfPeriod}</strong></span>
+                  <span>Source <strong className="font-medium text-slate-300">{run.sourceState}</strong></span>
+                  <span>{run.evidenceCount} evidence · {run.filingCount} filings</span>
+                  <span>{run.metricCount} metrics · {run.transformCount} transforms</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2 border-t border-slate-800 pt-2 text-[10px] text-slate-600">
+                  <span>Input signature</span>
+                  <code className="font-mono text-emerald-300/80">{run.inputSignature}</code>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
