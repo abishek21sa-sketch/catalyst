@@ -69,6 +69,8 @@ type EventFilter = 'all' | 'filing' | 'metric' | 'hypothesis';
 type SignalFilter = 'all' | Event['signal'];
 type EventLabel = 'catalyst' | 'risk' | 'context' | 'monitor';
 type EventLabelFilter = 'all' | EventLabel;
+type HypothesisFilter = 'all' | 'testing' | 'supported' | 'parked';
+type StudyFilter = 'all' | 'active' | 'queued';
 type DraftTarget = { kind: 'hypothesis' | 'study'; id: string; title: string; description: string };
 type SourceQuality = { status: 'pass' | 'review' | 'fixture'; currentPeriod: string | null; priorPeriod: string | null; alignedCurrentPeriod: boolean; alignedPriorPeriod: boolean; duplicateFacts: number; amendedFilings: number; missingMetrics: number };
 type MetricHistoryPoint = { value: number; period: string };
@@ -180,6 +182,8 @@ export default function CatalystView() {
   const [eventFilter, setEventFilter] = useState<EventFilter>('all');
   const [signalFilter, setSignalFilter] = useState<SignalFilter>('all');
   const [labelFilter, setLabelFilter] = useState<EventLabelFilter>('all');
+  const [hypothesisFilter, setHypothesisFilter] = useState<HypothesisFilter>('all');
+  const [studyFilter, setStudyFilter] = useState<StudyFilter>('all');
   const [activeNav, setActiveNav] = useState<NavLabel>('Overview');
   const [draftKind, setDraftKind] = useState<'hypothesis' | 'study' | null>(
     null,
@@ -300,6 +304,14 @@ export default function CatalystView() {
   const linkedStudies = useMemo(
     () => studies.filter((study) => study.evidenceIds?.includes(selected.id)),
     [selected.id, studies],
+  );
+  const visibleHypotheses = useMemo(
+    () => hypotheses.filter((hypothesis) => hypothesisFilter === 'all' || hypothesis.status === hypothesisFilter),
+    [hypotheses, hypothesisFilter],
+  );
+  const visibleStudies = useMemo(
+    () => studies.filter((study) => studyFilter === 'all' || study.state === studyFilter),
+    [studies, studyFilter],
   );
   const linkableStudies = useMemo(
     () => studies.filter((study) => !study.evidenceIds?.includes(selected.id)),
@@ -1439,8 +1451,23 @@ export default function CatalystView() {
                 id="hypotheses-panel"
                 title="What to test next"
                 kicker="WORKING HYPOTHESES"
+                actions={(
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
+                    <span className="sr-only">Filter hypothesis status</span>
+                    <select
+                      value={hypothesisFilter}
+                      onChange={(event) => setHypothesisFilter(event.target.value as HypothesisFilter)}
+                      className="bg-transparent text-[11px] text-slate-400 outline-none"
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="testing">Testing</option>
+                      <option value="supported">Supported</option>
+                      <option value="parked">Parked</option>
+                    </select>
+                  </label>
+                )}
               >
-                {hypotheses.map((h) => (
+                {visibleHypotheses.length ? visibleHypotheses.map((h) => (
                   <div
                     className="flex items-center gap-2.5 border-t border-slate-800/80 py-3.5"
                     key={h.id}
@@ -1497,10 +1524,34 @@ export default function CatalystView() {
                     </button>
                   )}
                   </div>
-                ))}
+                )) : (
+                  <div className="border-t border-slate-800/80 py-8 text-center">
+                    <strong className="block text-sm font-semibold text-slate-300">No matching hypotheses</strong>
+                    <span className="mt-1 block text-xs text-slate-500">Try another status filter.</span>
+                    <button type="button" onClick={() => setHypothesisFilter('all')} className="mt-3 rounded border border-emerald-900 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10">Show all hypotheses</button>
+                  </div>
+                )}
               </ResearchCard>
-              <ResearchCard id="research-queue" title="Research queue" kicker="ACTIVE STUDIES">
-                {studies.map((s) => (
+              <ResearchCard
+                id="research-queue"
+                title="Research queue"
+                kicker="ACTIVE STUDIES"
+                actions={(
+                  <label className="flex items-center gap-2 rounded-lg border border-slate-800 bg-[#101a21] px-2.5 py-2 text-[11px] text-slate-400">
+                    <span className="sr-only">Filter study state</span>
+                    <select
+                      value={studyFilter}
+                      onChange={(event) => setStudyFilter(event.target.value as StudyFilter)}
+                      className="bg-transparent text-[11px] text-slate-400 outline-none"
+                    >
+                      <option value="all">All states</option>
+                      <option value="active">Active</option>
+                      <option value="queued">Queued</option>
+                    </select>
+                  </label>
+                )}
+              >
+                {visibleStudies.length ? visibleStudies.map((s) => (
                   <div
                     className="flex items-center gap-2.5 border-t border-slate-800/80 py-3.5"
                     key={s.id}
@@ -1557,7 +1608,13 @@ export default function CatalystView() {
                     </button>
                   )}
                   </div>
-                ))}
+                )) : (
+                  <div className="border-t border-slate-800/80 py-8 text-center">
+                    <strong className="block text-sm font-semibold text-slate-300">No matching studies</strong>
+                    <span className="mt-1 block text-xs text-slate-500">Try another queue state.</span>
+                    <button type="button" onClick={() => setStudyFilter('all')} className="mt-3 rounded border border-emerald-900 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-300 hover:bg-emerald-300/10">Show all studies</button>
+                  </div>
+                )}
               </ResearchCard>
             </div>
             <footer className="flex flex-col justify-between gap-2 py-5 text-[10px] text-slate-600 sm:flex-row">
@@ -2075,22 +2132,27 @@ function ResearchCard({
   id,
   title,
   kicker,
+  actions,
   children,
 }: {
   id?: string;
   title: string;
   kicker: string;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section id={id} className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 px-4 pt-5 sm:px-5">
-      <div className="mb-2">
-        <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">
-          {kicker}
-        </span>
-        <h2 className="mt-1.5 text-[17px] font-semibold tracking-tight">
-          {title}
-        </h2>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-[10px] font-bold tracking-[.13em] text-slate-500">
+            {kicker}
+          </span>
+          <h2 className="mt-1.5 text-[17px] font-semibold tracking-tight">
+            {title}
+          </h2>
+        </div>
+        {actions}
       </div>
       {children}
     </section>
