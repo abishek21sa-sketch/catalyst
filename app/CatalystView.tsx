@@ -143,6 +143,14 @@ function isStudyRun(value: unknown): value is StudyRun {
     typeof candidate.inputSignature === 'string';
 }
 
+function parseStudyRuns(value: unknown): Record<string, StudyRun[]> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([studyId, candidate]) => {
+    const runs = Array.isArray(candidate) ? candidate.filter(isStudyRun) : isStudyRun(candidate) ? [candidate] : [];
+    return runs.length ? [[studyId, runs.slice(0, 10)]] : [];
+  }));
+}
+
 function inputSignature(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
@@ -229,7 +237,7 @@ export default function CatalystView() {
   );
   const [hypotheses, setHypotheses] = useState(snapshot.hypotheses);
   const [studies, setStudies] = useState(snapshot.studies);
-  const [studyRuns, setStudyRuns] = useState<Record<string, StudyRun>>({});
+  const [studyRuns, setStudyRuns] = useState<Record<string, StudyRun[]>>({});
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [hypothesisLinkId, setHypothesisLinkId] = useState('');
   const [studyLinkId, setStudyLinkId] = useState('');
@@ -313,10 +321,7 @@ export default function CatalystView() {
       }
       if (savedStudyRuns) {
         const parsedStudyRuns = JSON.parse(savedStudyRuns);
-        if (parsedStudyRuns && typeof parsedStudyRuns === 'object' && !Array.isArray(parsedStudyRuns)) {
-          const runs = Object.fromEntries(Object.entries(parsedStudyRuns).filter(([, value]) => isStudyRun(value))) as Record<string, StudyRun>;
-          setTimeout(() => setStudyRuns(runs), 0);
-        }
+        setTimeout(() => setStudyRuns(parseStudyRuns(parsedStudyRuns)), 0);
       }
       if (savedComparison) {
         const parsedComparison = JSON.parse(savedComparison);
@@ -651,7 +656,7 @@ export default function CatalystView() {
       inputSignature: inputSignature(manifest),
     };
     setStudyRuns((runs) => {
-      const next = { ...runs, [study.id]: run };
+      const next = { ...runs, [study.id]: [run, ...(runs[study.id] ?? [])].slice(0, 10) };
       window.localStorage.setItem('catalyst:study-runs', JSON.stringify(next));
       return next;
     });
@@ -941,7 +946,8 @@ export default function CatalystView() {
       exportedAt: new Date().toISOString(),
       company: snapshot.company,
       study,
-      lastRun: studyRuns[study.id] ?? null,
+      lastRun: studyRuns[study.id]?.[0] ?? null,
+      runHistory: studyRuns[study.id] ?? [],
       evidence,
       metrics: {
         current: metrics,
@@ -1012,7 +1018,7 @@ export default function CatalystView() {
         sourceQuality?: SourceQuality;
         hypotheses?: typeof snapshot.hypotheses;
         studies?: typeof snapshot.studies;
-        studyRuns?: Record<string, StudyRun>;
+        studyRuns?: Record<string, StudyRun | StudyRun[]>;
         comparison?: SecComparison | null;
       };
       if (payload.company?.cik !== snapshot.company.cik || !Array.isArray(payload.metrics) || !Array.isArray(payload.hypotheses) || !Array.isArray(payload.studies)) {
@@ -1056,9 +1062,7 @@ export default function CatalystView() {
       }
       setHypotheses(payload.hypotheses);
       setStudies(payload.studies);
-      const nextStudyRuns = payload.studyRuns && typeof payload.studyRuns === 'object' && !Array.isArray(payload.studyRuns)
-        ? Object.fromEntries(Object.entries(payload.studyRuns).filter(([, value]) => isStudyRun(value))) as Record<string, StudyRun>
-        : {};
+      const nextStudyRuns = parseStudyRuns(payload.studyRuns);
       setStudyRuns(nextStudyRuns);
       if (payload.comparison === null) {
         setComparison(null);
@@ -1812,7 +1816,8 @@ export default function CatalystView() {
                 )}
               >
                 {visibleStudies.length ? visibleStudies.map((s) => {
-                  const run = studyRuns[s.id];
+                  const runHistory = studyRuns[s.id] ?? [];
+                  const run = runHistory[0];
                   return (
                   <div
                     className="flex items-center gap-2.5 border-t border-slate-800/80 py-3.5"
@@ -1833,7 +1838,7 @@ export default function CatalystView() {
                       </small>
                       {run ? (
                         <small className="text-[10px] text-emerald-300/80">
-                          Last run {formatSourceTime(run.executedAt)} · {run.asOfPeriod} · {run.sourceState} source · quality {run.qualityStatus} · {run.inputSignature}
+                          Last run {formatSourceTime(run.executedAt)} · {run.asOfPeriod} · {run.sourceState} source · quality {run.qualityStatus} · {run.inputSignature} · {runHistory.length} saved run{runHistory.length === 1 ? '' : 's'}
                         </small>
                       ) : (
                         <small className="text-[10px] text-slate-600">No reproducible run captured</small>

@@ -20,7 +20,7 @@ The workspace starts from a deterministic Microsoft FY24 SEC EDGAR fixture throu
 - Editable hypotheses and studies with local status/state workflows.
 - Annual metric history, derived operating transforms, CSV exports, Markdown briefs, and auditable study packets.
 - Live SEC company comparison with cross-company period checks and exportable comparison snapshots.
-- Reproducible study-run snapshots that capture current inputs, source quality, and a stable input signature.
+- Reproducible study-run history that retains the latest ten snapshots per study, including current inputs, source quality, and stable input signatures.
 - Workspace JSON export/import plus local persistence for research state.
 
 ## Product boundary

@@ -11,7 +11,7 @@ The current release includes:
 - Editable hypotheses and studies with queue/status controls.
 - Derived operating transforms, metric-history CSV, event-review CSV, Markdown brief, workspace JSON, and study-packet exports.
 - Live SEC comparison for an alternate company, with period-alignment warnings and comparison export.
-- Local persistence for research state and reproducible study-run snapshots with captured inputs and stable signatures.
+- Local persistence for research state and reproducible study-run history with captured inputs and stable signatures.
 
 ## Next — durable workspaces and company context
 
