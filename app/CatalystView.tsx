@@ -144,6 +144,7 @@ export default function CatalystView() {
   >('fixture');
   const [sourceUpdatedAt, setSourceUpdatedAt] = useState<string | null>(null);
   const [sourceQuality, setSourceQuality] = useState<SourceQuality>(fixtureSourceQuality);
+  const [qualityOpen, setQualityOpen] = useState(false);
   const [metrics, setMetrics] = useState(snapshot.metrics);
   const [previousMetrics, setPreviousMetrics] = useState<Record<string, number>>(fixturePriorMetrics);
   const [metricHistory, setMetricHistory] = useState<MetricHistory>(fixtureMetricHistory);
@@ -614,6 +615,14 @@ export default function CatalystView() {
       `- Exchange: ${snapshot.company.exchange}`,
       `- Source: ${sourceDescription}`,
       '',
+      '## Data quality',
+      `- Status: ${sourceQualityLabel}`,
+      `- Current period: ${sourceQuality.currentPeriod ?? 'Unavailable'} (${sourceQuality.alignedCurrentPeriod ? 'aligned' : 'review needed'})`,
+      `- Prior period: ${sourceQuality.priorPeriod ?? 'Unavailable'} (${sourceQuality.alignedPriorPeriod ? 'aligned' : 'review needed'})`,
+      `- Duplicate annual facts: ${sourceQuality.duplicateFacts}`,
+      `- Amended annual filings: ${sourceQuality.amendedFilings}`,
+      `- Missing metrics: ${sourceQuality.missingMetrics}`,
+      '',
       '## Metrics',
       ...metrics.map((metric) => `- **${metric.label}:** ${formatMetric(metric.value)} (${metric.period})`),
       '',
@@ -954,13 +963,14 @@ export default function CatalystView() {
                 ))}
               </div>
             </section>
-            <div className={`mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-[10px] ${sourceQuality.status === 'review' ? 'border-amber-900/70 bg-amber-950/15 text-amber-200' : 'border-emerald-900/60 bg-emerald-950/10 text-emerald-200'}`}>
+            <button type="button" onClick={() => setQualityOpen(true)} aria-label="Open data quality details" className={`mt-2 flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-3 py-2 text-left text-[10px] ${sourceQuality.status === 'review' ? 'border-amber-900/70 bg-amber-950/15 text-amber-200' : 'border-emerald-900/60 bg-emerald-950/10 text-emerald-200'}`}>
               <span className="font-bold uppercase tracking-[.12em] text-slate-500">Data quality</span>
               <strong>{sourceQualityLabel}</strong>
               <span className="text-slate-500">Current period {sourceQuality.currentPeriod ?? 'Unavailable'}</span>
               {sourceQuality.priorPeriod && <span className="text-slate-500">Prior period {sourceQuality.priorPeriod}</span>}
               <span className="text-slate-500">{sourceQualityDetail}</span>
-            </div>
+              <ArrowUpRight size={12} className="ml-auto text-slate-600" />
+            </button>
             <div className="mt-8 grid gap-4 xl:grid-cols-[minmax(0,1.34fr)_minmax(330px,.66fr)]">
               <section id="event-stream" className="scroll-mt-6 rounded-xl border border-slate-800 bg-[#101820]/75 p-4 sm:p-5">
                 <div className="flex items-start justify-between">
@@ -1509,6 +1519,12 @@ export default function CatalystView() {
         }}
         onSelect={selectSearchResult}
       />
+      <QualityDialog
+        open={qualityOpen}
+        onOpenChange={setQualityOpen}
+        quality={sourceQuality}
+        sourceDescription={sourceDescription}
+      />
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-md">
           <AlertDialogHeader>
@@ -1644,6 +1660,55 @@ function MetricsCard({ metrics, previousMetrics, metricHistory }: { metrics: Met
         </div>
       </div>
     </section>
+  );
+}
+
+function QualityDialog({
+  open,
+  onOpenChange,
+  quality,
+  sourceDescription,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  quality: SourceQuality;
+  sourceDescription: string;
+}) {
+  const checks = [
+    { label: 'Current period alignment', value: quality.alignedCurrentPeriod ? 'Pass' : 'Review', detail: quality.currentPeriod ?? 'Unavailable', good: quality.alignedCurrentPeriod },
+    { label: 'Prior period alignment', value: quality.alignedPriorPeriod ? 'Pass' : 'Review', detail: quality.priorPeriod ?? 'Unavailable', good: quality.alignedPriorPeriod },
+    { label: 'Duplicate annual facts', value: quality.duplicateFacts === 0 ? 'None' : `${quality.duplicateFacts} found`, detail: 'Same accession, period, filing, and value', good: quality.duplicateFacts === 0 },
+    { label: 'Amended annual filings', value: quality.amendedFilings === 0 ? 'None' : `${quality.amendedFilings} found`, detail: '10-K/A rows in selected concepts', good: quality.amendedFilings === 0 },
+    { label: 'Missing metrics', value: quality.missingMetrics === 0 ? 'None' : `${quality.missingMetrics} missing`, detail: 'Revenue, operating income, net income', good: quality.missingMetrics === 0 },
+  ];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="border border-slate-800 bg-[#101820] text-slate-100 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="text-slate-100">Data quality audit</DialogTitle>
+          <DialogDescription className="text-slate-400">
+            {sourceDescription}. Annual USD facts are checked before they enter the research workspace.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {checks.map((check) => (
+            <div key={check.label} className="flex items-center gap-3 rounded-lg border border-slate-800/90 bg-[#0b1319]/70 px-3 py-2.5">
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${check.good ? 'bg-emerald-300/10 text-emerald-300' : 'bg-amber-300/10 text-amber-300'}`}>
+                {check.good ? '✓' : '!'}
+              </span>
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <strong className="text-xs text-slate-300">{check.label}</strong>
+                <small className="truncate text-[10px] text-slate-600">{check.detail}</small>
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-[.08em] ${check.good ? 'text-emerald-300' : 'text-amber-300'}`}>{check.value}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] leading-5 text-slate-500">
+          A review flag does not discard the source. It marks a condition that should be checked before treating the comparison as decision-grade.
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
 
