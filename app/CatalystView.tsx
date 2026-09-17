@@ -770,6 +770,44 @@ export default function CatalystView() {
     URL.revokeObjectURL(downloadUrl);
     setWorkspaceMessage({ text: 'Event review CSV exported' });
   }
+  function exportStudyPacket(study: (typeof snapshot.studies)[number]) {
+    const evidence = (study.evidenceIds ?? []).flatMap((eventId) => {
+      const event = eventById.get(eventId);
+      return event ? [{
+        event,
+        analystLabel: eventLabelText(eventLabels[eventId]) ?? null,
+        analystNote: eventNotes[eventId]?.trim() ?? '',
+      }] : [];
+    });
+    const packet = {
+      kind: 'catalyst.study-packet',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      company: snapshot.company,
+      study,
+      evidence,
+      metrics: {
+        current: metrics,
+        prior: previousMetrics,
+        history: metricHistory,
+        transforms: [
+          { label: 'Revenue growth', formula: 'Revenue current ÷ prior − 1' },
+          { label: 'Operating margin', formula: 'Operating income ÷ revenue' },
+          { label: 'Net margin', formula: 'Net income ÷ revenue' },
+        ],
+      },
+      filings,
+      source: { state: sourceState, updatedAt: sourceUpdatedAt, quality: sourceQuality },
+      provenance: snapshot.provenance,
+    };
+    const downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `catalyst-${snapshot.company.ticker.toLowerCase()}-${study.id}-packet.json`;
+    link.click();
+    URL.revokeObjectURL(downloadUrl);
+    setWorkspaceMessage({ text: `Study packet exported: ${study.title}` });
+  }
   async function importWorkspace(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1598,6 +1636,15 @@ export default function CatalystView() {
                     className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300"
                   >
                     <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Export packet for ${s.title}`}
+                    title="Export study packet"
+                    onClick={() => exportStudyPacket(s)}
+                    className="grid h-7 w-7 place-items-center rounded text-slate-600 hover:bg-emerald-950/40 hover:text-emerald-300"
+                  >
+                    <Download size={13} />
                   </button>
                   <button type="button" onClick={() => toggleStudyState(s.id)} className="rounded border border-slate-700 px-1.5 py-1 text-[9px] font-semibold text-slate-400 hover:border-emerald-800 hover:text-emerald-300">
                     {s.state === 'active' ? 'Queue' : 'Start'}
